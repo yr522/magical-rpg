@@ -67,8 +67,23 @@
     <header class="statusbar" id="statusbar"></header>
     <main class="field">
       <div class="field-main">
-        <div id="field-log" class="log"></div>
-        <div id="actions" class="actions"></div>
+        <div id="field-view" class="field-view">
+          <div id="field-log" class="log"></div>
+          <div id="actions" class="actions"></div>
+        </div>
+        <!-- 전투 화면: 위에 적, 가운데 메뉴, 좌우에 참가자 프사 2명씩 -->
+        <div id="battle-view" class="battle-view hidden">
+          <div id="enemy" class="enemy"></div>
+          <div class="battle-grid">
+            <div class="slots" id="slots-left"></div>
+            <div class="battle-menu">
+              <p id="turn-info" class="turn-info"></p>
+              <div id="battle-buttons" class="battle-buttons"></div>
+            </div>
+            <div class="slots" id="slots-right"></div>
+          </div>
+          <div id="battle-log" class="log battle-log"></div>
+        </div>
       </div>
       <aside class="field-side">
         <h3>이곳의 계약자</h3>

@@ -1,0 +1,9 @@
+{
+  "_설명": "use: 전투 중 사용 효과. hp/mp 회복량. 장비는 4단계에서 추가한다.",
+  "items": [
+    { "id": "heal_candy", "name": "회복 사탕", "kind": "consumable", "desc": "HP를 60 회복한다.", "use": { "hp": 60 }, "price": 20 },
+    { "id": "mana_jelly", "name": "마나 젤리", "kind": "consumable", "desc": "MP를 30 회복한다.", "use": { "mp": 30 }, "price": 25 },
+    { "id": "rift_shard", "name": "균열 파편", "kind": "material", "desc": "날카로운 초록빛 조각. 아직 쓸 곳이 없다.", "price": 5 },
+    { "id": "rift_core", "name": "몬스터 핵", "kind": "material", "desc": "아직 미약하게 맥동한다.", "price": 30 }
+  ]
+}

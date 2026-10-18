@@ -1,46 +1,125 @@
 {
-  "baseStats": { "str": 5, "mag": 5, "vit": 5, "agi": 5, "luk": 5 },
+  "baseStats": {
+    "str": 5,
+    "mag": 5,
+    "vit": 5,
+    "agi": 5,
+    "luk": 5
+  },
   "startGold": 100,
   "startLocation": "hq_plaza",
+  "startItems": [
+    "heal_candy",
+    "heal_candy",
+    "heal_candy"
+  ],
+  "growth": {
+    "statPointsPerLevel": 3,
+    "maxLevel": 30,
+    "expPerLevel": 50
+  },
   "genders": [
-    { "id": "girl", "name": "마법소녀" },
-    { "id": "boy", "name": "마법소년" }
+    {
+      "id": "girl",
+      "name": "마법소녀"
+    },
+    {
+      "id": "boy",
+      "name": "마법소년"
+    }
   ],
   "elements": [
-    { "id": "fire", "name": "화염" },
-    { "id": "water", "name": "물" },
-    { "id": "nature", "name": "자연" },
-    { "id": "light", "name": "빛" },
-    { "id": "dark", "name": "암흑" },
-    { "id": "thunder", "name": "번개" },
-    { "id": "ice", "name": "얼음" },
-    { "id": "physical", "name": "물리" }
+    {
+      "id": "fire",
+      "name": "화염"
+    },
+    {
+      "id": "water",
+      "name": "물"
+    },
+    {
+      "id": "nature",
+      "name": "자연"
+    },
+    {
+      "id": "light",
+      "name": "빛"
+    },
+    {
+      "id": "dark",
+      "name": "암흑"
+    },
+    {
+      "id": "thunder",
+      "name": "번개"
+    },
+    {
+      "id": "ice",
+      "name": "얼음"
+    },
+    {
+      "id": "physical",
+      "name": "물리"
+    }
   ],
   "classes": [
     {
       "id": "attacker",
       "name": "공격형 (어태커)",
       "desc": "확실히 높은 딜. 대신 맷집이 약해 고레벨 토벌은 파티를 권장한다.",
-      "bonus": { "str": 2, "mag": 2 }
+      "bonus": {
+        "str": 2,
+        "mag": 2
+      }
     },
     {
       "id": "guardian",
       "name": "방어형 (가디언)",
       "desc": "솔플 특화. 딜은 낮지만 오래 버틴다. 파티에서는 아군을 지킨다.",
-      "bonus": { "vit": 4 }
+      "bonus": {
+        "vit": 4
+      }
     },
     {
       "id": "supporter",
       "name": "지원형 (서포터)",
       "desc": "회복과 버프로 동료를 돕는다.",
-      "bonus": { "mag": 2, "luk": 2 }
+      "bonus": {
+        "mag": 2,
+        "luk": 2
+      }
     }
   ],
   "gods": [
-    { "id": "god_str", "name": "힘의 신", "stat": "str", "bonus": 3 },
-    { "id": "god_mag", "name": "마력의 신", "stat": "mag", "bonus": 3 },
-    { "id": "god_vit", "name": "생명의 신", "stat": "vit", "bonus": 3 },
-    { "id": "god_agi", "name": "바람의 신", "stat": "agi", "bonus": 3 },
-    { "id": "god_luk", "name": "행운의 신", "stat": "luk", "bonus": 3 }
+    {
+      "id": "god_str",
+      "name": "힘의 신",
+      "stat": "str",
+      "bonus": 3
+    },
+    {
+      "id": "god_mag",
+      "name": "마력의 신",
+      "stat": "mag",
+      "bonus": 3
+    },
+    {
+      "id": "god_vit",
+      "name": "생명의 신",
+      "stat": "vit",
+      "bonus": 3
+    },
+    {
+      "id": "god_agi",
+      "name": "바람의 신",
+      "stat": "agi",
+      "bonus": 3
+    },
+    {
+      "id": "god_luk",
+      "name": "행운의 신",
+      "stat": "luk",
+      "bonus": 3
+    }
   ]
 }
