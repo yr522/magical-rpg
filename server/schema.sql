@@ -34,3 +34,15 @@ CREATE TABLE IF NOT EXISTS characters (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS characters_name_key ON characters (lower(name));
 CREATE INDEX IF NOT EXISTS characters_user_idx ON characters (user_id);
+
+-- 아이템 "실물". item_code로 items.json 정의를 찾는다. (3단계부터)
+CREATE TABLE IF NOT EXISTS items (
+  id          BIGSERIAL PRIMARY KEY,
+  owner_id    BIGINT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  item_code   TEXT NOT NULL,
+  enhance     INT NOT NULL DEFAULT 0,
+  is_equipped BOOLEAN NOT NULL DEFAULT false,
+  slot        TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS items_owner_idx ON items (owner_id);

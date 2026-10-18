@@ -1,12 +1,20 @@
 // 고정 게임 데이터(JSON)와 캐릭터 규칙. DB와 통신 코드는 여기 두지 않는다.
 const characterData = require('./data/character.json');
 const mapData = require('./data/map.json');
+const { monsters: monsterList } = require('./data/monsters.json');
+const { items: itemList } = require('./data/items.json');
+const { skills: skillList } = require('./data/skills.json');
+const { events: eventList } = require('./data/events.json');
 
 const STAT_KEYS = ['str', 'mag', 'vit', 'agi', 'luk'];
 const NAME_PATTERN = /^[가-힣a-zA-Z0-9 ]{2,12}$/;
 
 const zones = new Map(mapData.zones.map((z) => [z.id, z]));
 const regions = new Map(mapData.regions.map((r) => [r.id, r]));
+const monsters = new Map(monsterList.map((m) => [m.id, m]));
+const items = new Map(itemList.map((i) => [i.id, i]));
+const skills = new Map(skillList.map((s) => [s.id, s]));
+const { growth } = characterData;
 
 // 서버 시작 시 맵이 잘못 적혀 있으면 바로 알려 준다 (없는 구역으로 가는 출구 등).
 function validateMap() {
@@ -24,6 +32,22 @@ function validateMap() {
   }
   if (!zones.has(characterData.startLocation)) {
     throw new Error('character.json: startLocation 구역이 map.json에 없습니다');
+  }
+  for (const code of characterData.startItems) {
+    if (!items.has(code)) throw new Error(`character.json: startItems의 ${code} 아이템이 items.json에 없습니다`);
+  }
+  for (const m of monsterList) {
+    for (const drop of m.drops) {
+      if (!items.has(drop.item)) throw new Error(`monsters.json: ${m.id}의 드롭 ${drop.item}이 items.json에 없습니다`);
+    }
+  }
+  const classIds = new Set(characterData.classes.map((c) => c.id));
+  for (const sk of skillList) {
+    if (!classIds.has(sk.class)) throw new Error(`skills.json: ${sk.id}의 클래스 ${sk.class}가 없습니다`);
+  }
+  for (const ev of eventList) {
+    if (!zones.has(ev.zone)) throw new Error(`events.json: ${ev.id}의 구역 ${ev.zone}이 map.json에 없습니다`);
+    if (!monsters.has(ev.monster)) throw new Error(`events.json: ${ev.id}의 몬스터 ${ev.monster}가 monsters.json에 없습니다`);
   }
 }
 
@@ -50,6 +74,49 @@ function derivedStats(stats, level) {
     evasion: Math.min(30, stats.agi * 0.5),
     crit: Math.min(25, stats.luk * 0.5),
   };
+}
+
+// 다음 레벨까지 필요한 경험치. 최대 레벨이면 null.
+function expToNext(level) {
+  return level >= growth.maxLevel ? null : growth.expPerLevel * level;
+}
+
+// 경험치를 더하고 레벨업을 처리한다. row를 직접 바꾸고 오른 레벨 수를 돌려준다.
+function gainExp(row, amount) {
+  row.exp += amount;
+  let levels = 0;
+  for (let need = expToNext(row.level); need !== null && row.exp >= need; need = expToNext(row.level)) {
+    row.exp -= need;
+    row.level += 1;
+    row.stat_points += growth.statPointsPerLevel;
+    levels += 1;
+  }
+  if (expToNext(row.level) === null) row.exp = 0;
+  if (levels) {
+    // 레벨업 시 HP/MP 전체 회복.
+    const { maxHp, maxMp } = derivedStats(statsOf(row), row.level);
+    row.hp = maxHp;
+    row.mp = maxMp;
+  }
+  return levels;
+}
+
+const statsOf = (row) => Object.fromEntries(STAT_KEYS.map((k) => [k, row[k]]));
+
+// 전투용 수치 (장비가 생기면 여기에 더한다).
+function combatStats(row) {
+  const stats = statsOf(row);
+  return {
+    ...derivedStats(stats, row.level),
+    physAtk: stats.str * 2 + row.level,
+    magAtk: stats.mag * 2 + row.level,
+    def: stats.vit * 1.5 + row.level,
+    agi: stats.agi,
+  };
+}
+
+function skillsFor(classId, level) {
+  return skillList.filter((s) => s.class === classId && s.level <= level);
 }
 
 // 입력값을 검사하고 DB에 넣을 새 캐릭터 값을 만든다. 실패하면 { error }.
@@ -85,7 +152,7 @@ function buildNewCharacter(input) {
 
 // 클라이언트에 보낼 캐릭터 정보 (내부 컬럼 이름을 화면용으로 정리).
 function characterView(row) {
-  const stats = Object.fromEntries(STAT_KEYS.map((k) => [k, row[k]]));
+  const stats = statsOf(row);
   const zone = zones.get(row.location_id);
   return {
     id: row.id,
@@ -96,12 +163,15 @@ function characterView(row) {
     god: row.god,
     level: row.level,
     exp: row.exp,
+    expToNext: expToNext(row.level),
     gold: row.gold,
     hp: row.hp,
     mp: row.mp,
     statPoints: row.stat_points,
     stats,
     derived: derivedStats(stats, row.level),
+    skills: skillsFor(row.class, row.level).map((sk) => ({ id: sk.id, name: sk.name, mp: sk.mp, desc: sk.desc })),
+    nextSkill: (skillList.find((sk) => sk.class === row.class && sk.level > row.level) || {}).level || null,
     locationId: row.location_id,
     locationName: zone ? zone.name : '알 수 없는 곳',
     avatarUrl: row.avatar_url || null,
@@ -125,6 +195,14 @@ module.exports = {
   mapData,
   zones,
   regions,
+  monsters,
+  items,
+  skills,
+  eventList,
+  expToNext,
+  gainExp,
+  combatStats,
+  skillsFor,
   STAT_KEYS,
   validateMap,
   computeStartStats,

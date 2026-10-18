@@ -1,0 +1,19 @@
+{
+  "_설명": "type: damage(공격) / heal(회복) / buff(강화) / taunt(도발). stat: 위력에 쓰는 스탯. element: own이면 내 속성, physical이면 물리. cooldown: 쓰고 나서 기다려야 하는 내 차례 수. target(heal/buff): self / ally(가장 다친 동료) / allies(전원). buff.kind: atk(공격력 증가) / guard(받는 피해 감소), rounds: 지속 라운드.",
+  "skills": [
+    { "id": "star_strike", "class": "attacker", "name": "별빛 일격", "level": 1, "mp": 8, "cooldown": 1, "type": "damage", "stat": "mag", "element": "own", "coef": 1.6, "desc": "내 속성으로 강하게 내리친다." },
+    { "id": "twin_slash", "class": "attacker", "name": "연속 베기", "level": 3, "mp": 10, "cooldown": 2, "type": "damage", "stat": "str", "element": "physical", "coef": 0.9, "hits": 2, "desc": "물리 공격 2회." },
+    { "id": "rift_break", "class": "attacker", "name": "균열 붕괴", "level": 6, "mp": 20, "cooldown": 3, "type": "damage", "stat": "mag", "element": "own", "coef": 2.5, "desc": "큰 위력의 속성 공격." },
+    { "id": "contract_flash", "class": "attacker", "name": "계약의 섬광", "level": 10, "mp": 35, "cooldown": 5, "type": "damage", "stat": "mag", "element": "own", "coef": 3.5, "desc": "계약 신의 힘을 빌린 일격." },
+
+    { "id": "guard_strike", "class": "guardian", "name": "수호의 일격", "level": 1, "mp": 5, "cooldown": 1, "type": "damage", "stat": "str", "element": "own", "coef": 1.7, "desc": "내 속성을 실은 묵직한 공격." },
+    { "id": "provoke", "class": "guardian", "name": "도발", "level": 1, "mp": 6, "cooldown": 3, "type": "taunt", "rounds": 2, "buff": { "kind": "guard", "value": 0.3, "rounds": 2 }, "desc": "2라운드 동안 적의 공격을 끌어오고, 받는 피해 30% 감소." },
+    { "id": "iron_wall", "class": "guardian", "name": "철벽", "level": 6, "mp": 12, "cooldown": 4, "type": "buff", "target": "self", "buff": { "kind": "guard", "value": 0.6, "rounds": 2 }, "desc": "2라운드 동안 받는 피해 60% 감소." },
+    { "id": "ward_field", "class": "guardian", "name": "수호 결계", "level": 10, "mp": 20, "cooldown": 5, "type": "buff", "target": "allies", "buff": { "kind": "guard", "value": 0.3, "rounds": 2 }, "desc": "2라운드 동안 아군 전원 받는 피해 30% 감소." },
+
+    { "id": "healing_light", "class": "supporter", "name": "치유의 빛", "level": 1, "mp": 8, "cooldown": 1, "type": "heal", "target": "ally", "stat": "mag", "coef": 3, "base": 10, "desc": "가장 다친 동료(또는 나)의 HP 회복." },
+    { "id": "wish_wave", "class": "supporter", "name": "소원의 파동", "level": 1, "mp": 6, "cooldown": 1, "type": "damage", "stat": "mag", "element": "own", "coef": 1.2, "desc": "내 속성의 파동 공격." },
+    { "id": "blessing", "class": "supporter", "name": "축복", "level": 3, "mp": 12, "cooldown": 4, "type": "buff", "target": "allies", "buff": { "kind": "atk", "value": 0.3, "rounds": 2 }, "desc": "2라운드 동안 아군 전원 공격력 30% 증가." },
+    { "id": "purifying_rain", "class": "supporter", "name": "정화의 비", "level": 6, "mp": 18, "cooldown": 3, "type": "heal", "target": "allies", "stat": "mag", "coef": 2, "base": 10, "desc": "아군 전원 HP 회복." }
+  ]
+}

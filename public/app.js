@@ -19,6 +19,9 @@
     zone: null,
     activeCharacterId: Number(storage.get('activeCharacterId')) || null,
     draft: {},
+    battle: null, // 전투 중이면 서버가 보낸 전투 화면 데이터
+    battleMenu: 'main', // main / skill / item
+    bubbles: new Map(), // 캐릭터 id → { text, until } 말풍선
   };
 
   // ---------- 공통 ----------
@@ -229,6 +232,7 @@
     const history = [...data.history.global, ...data.history.zone].sort((a, b) => a.at - b.at);
     for (const msg of history) addChat(msg);
     if (data.resumed) addLog('연결이 다시 이어졌다.', 'system');
+    setBattleMode(false);
     enterZone(data.zone, data.players);
     show('game');
   });
@@ -243,6 +247,11 @@
   socket.on('zone:players', renderPlayers);
   socket.on('log', ({ text }) => addLog(text, 'system'));
   socket.on('chat', addChat);
+  socket.on('notice', ({ text }) => {
+    const list = $('chat-log');
+    list.append(el('li', { class: 'notice', 'data-channel': 'notice', text: `📢 ${text}` }));
+    list.scrollTop = list.scrollHeight;
+  });
 
   function addLog(text, kind) {
     const log = $('field-log');
@@ -256,6 +265,7 @@
       el('span', {}, [el('strong', { text: c.name }), ` Lv.${c.level}`]),
       el('span', { text: `HP ${c.hp}/${c.derived.maxHp}` }),
       el('span', { text: `MP ${c.mp}/${c.derived.maxMp}` }),
+      el('span', { text: c.expToNext ? `EXP ${c.exp}/${c.expToNext}` : 'EXP 최대 레벨' }),
       el('span', { text: `${c.gold} G` }),
       el('span', { class: 'muted', text: `${state.zone.region.name} · ${state.zone.name}` }),
     );
@@ -265,18 +275,25 @@
     state.zone = zone;
     addLog(`— ${zone.name} —`, 'place');
     addLog(zone.desc);
+    for (const ev of zone.events) addLog(`균열의 기척이 느껴진다 — ${ev.monsterName} (등급: ${ev.grade})`, 'system');
     renderStatus();
     renderPlayers(players);
-    const buttons = zone.exits.map((exit) => el('button', { class: 'move', text: exit.label, onclick: () => move(exit.to) }));
+    renderActions();
+  }
+
+  function renderActions() {
+    const zone = state.zone;
+    const buttons = zone.events.map((ev) => el('button', { class: 'raid', text: `⚔ 입장 · ${ev.monsterName}`, onclick: () => enterRaid(ev.id) }));
+    buttons.push(...zone.exits.map((exit) => el('button', { class: 'move', text: exit.label, onclick: () => move(exit.to) })));
     buttons.push(el('button', { text: '둘러보기', onclick: look }));
-    if (!zone.region.safe) buttons.push(el('button', { text: '토벌 목록', onclick: raidList }));
+    buttons.push(el('button', { text: '토벌 목록', onclick: raidList }));
     $('actions').replaceChildren(...buttons);
   }
 
   function renderPlayers(players) {
     $('players').replaceChildren(...players.map((p) => el('li', { class: p.away ? 'away' : '' }, [
       avatar(p.name, p.avatarUrl, true),
-      `${p.name} Lv.${p.level}${p.away ? ' (자리 비움)' : ''}${state.character && p.id === state.character.id ? ' (나)' : ''}`,
+      `${p.name} Lv.${p.level}${p.inBattle ? ' (전투 중)' : ''}${p.away ? ' (자리 비움)' : ''}${state.character && p.id === state.character.id ? ' (나)' : ''}`,
     ])));
   }
 
@@ -292,6 +309,7 @@
     for (const li of [...$('chat-log').children]) if (li.dataset.channel === 'zone') li.remove();
     for (const msg of res.history) addChat(msg);
     enterZone(res.zone, res.players);
+    if (res.healed) addLog('본부의 등불 아래에서 상처가 아문다. (HP/MP 모두 회복)', 'system');
   }
 
   async function look() {
@@ -303,7 +321,200 @@
   async function raidList() {
     const res = await request('raid:list');
     if (res.error) return toast(res.error);
-    addLog(res.events.length ? `토벌 이벤트 ${res.events.length}개가 열려 있다.` :'지금 이 지역에 열린 토벌 이벤트는 없다.', 'notice');
+    const rows = res.events.map((ev) => el('div', { class: `region ${ev.here ? 'here' : ''}` }, [
+      el('strong', { text: `${ev.monsterName} Lv.${ev.monsterLevel}` }),
+      el('div', { class: 'muted', text: `${ev.regionName} · ${ev.zoneName} · 등급 ${ev.grade} · 남은 시간 ${ev.remaining || '-'} · 참가 ${ev.participants}/${ev.max}` }),
+      ev.label ? el('div', { class: 'muted', text: ev.label }) : null,
+      ev.here
+        ? el('button', { text: '입장', onclick: () => { $('modal').classList.add('hidden'); enterRaid(ev.id); } })
+        : el('div', { text: `${ev.zoneName}(으)로 가야 입장할 수 있다.` }),
+    ]));
+    openModal(el('div', {}, [el('h2', { text: '토벌 목록' }), ...(rows.length ? rows : [el('p', { class: 'muted', text: '지금 열린 토벌 이벤트가 없다.' })])]));
+  }
+
+  async function enterRaid(eventId) {
+    const res = await request('raid:enter', { eventId });
+    if (res.error) toast(res.error);
+  }
+
+  // ---------- 전투 ----------
+  function setBattleMode(on) {
+    $('field-view').classList.toggle('hidden', on);
+    $('battle-view').classList.toggle('hidden', !on);
+    document.body.classList.toggle('in-battle', on);
+    const select = $('chat-form').elements.channel;
+    const existing = select.querySelector('option[value=battle]');
+    if (on && !existing) {
+      select.prepend(el('option', { value: 'battle', text: '전투' }));
+      select.value = 'battle';
+    } else if (!on && existing) {
+      existing.remove();
+      select.value = 'zone';
+    }
+    if (!on) {
+      state.battle = null;
+      state.battleMenu = 'main';
+      state.bubbles.clear();
+    }
+  }
+
+  socket.on('battle:state', (view) => {
+    if (!state.battle) {
+      setBattleMode(true);
+      $('battle-log').replaceChildren();
+      for (const line of view.log) addBattleLog(line);
+    }
+    const myTurnBefore = isMyTurn();
+    state.battle = view;
+    if (!isMyTurn() || !myTurnBefore) state.battleMenu = 'main';
+    renderBattle();
+  });
+
+  socket.on('battle:log', ({ text }) => addBattleLog(text));
+
+  socket.on('battle:end', (data) => {
+    setBattleMode(false);
+    state.character = data.character;
+    if (data.result === 'defeat') {
+      for (const li of [...$('chat-log').children]) if (li.dataset.channel === 'zone') li.remove();
+      for (const msg of data.history) addChat(msg);
+      enterZone(data.zone, data.players);
+    } else {
+      state.zone = data.zone;
+      renderStatus();
+      renderActions();
+    }
+    showResult(data);
+  });
+
+  function isMyTurn() {
+    const b = state.battle;
+    return Boolean(b && b.turn && b.turn.kind === 'player' && b.me && b.turn.id === b.me.id);
+  }
+
+  function addBattleLog(text) {
+    const log = $('battle-log');
+    log.append(el('p', { class: `entry ${text.startsWith('—') ? 'place' : ''}`, text }));
+    while (log.children.length > 80) log.firstChild.remove();
+    log.scrollTop = log.scrollHeight;
+  }
+
+  const bar = (kind, value, max) => el('div', { class: `bar ${kind}` }, [el('span', { style: `width:${max ? Math.round((value / max) * 100) : 0}%` })]);
+
+  function renderBattle() {
+    const b = state.battle;
+    const m = b.monster;
+    $('enemy').replaceChildren(
+      el('div', { class: 'name', text: `${m.name}  Lv.${m.level}` }),
+      bar('', m.hp, m.maxHp),
+      el('div', { text: `HP ${m.hp} / ${m.maxHp}` }),
+      el('div', { class: 'muted', text: m.desc }),
+    );
+    renderSlots();
+    renderTurnInfo();
+    renderBattleButtons();
+  }
+
+  function renderSlots() {
+    const b = state.battle;
+    const slots = [0, 1, 2, 3].map((i) => {
+      const p = b.party[i];
+      if (!p) return el('div', { class: 'slot empty', text: '빈자리' });
+      const status = [p.down && '쓰러짐', p.defending && '방어', p.taunting && '도발', ...p.buffs].filter(Boolean).join(' · ');
+      const bubble = state.bubbles.get(p.id);
+      return el('div', { class: `slot ${p.down ? 'down' : ''} ${b.turn && b.turn.id === p.id ? 'turn' : ''}` }, [
+        bubble && bubble.until > Date.now() ? el('div', { class: 'bubble', text: bubble.text }) : null,
+        avatar(p.name, p.avatarUrl),
+        el('div', { class: 'slot-name', text: `${p.name}${b.me && p.id === b.me.id ? ' (나)' : ''}` }),
+        bar('hp', p.hp, p.maxHp),
+        el('div', { text: `HP ${p.hp}/${p.maxHp}` }),
+        bar('mp', p.mp, p.maxMp),
+        el('div', { class: 'muted', text: `MP ${p.mp}/${p.maxMp}` }),
+        status ? el('div', { class: 'status', text: status }) : null,
+      ]);
+    });
+    $('slots-left').replaceChildren(slots[0], slots[1]);
+    $('slots-right').replaceChildren(slots[2], slots[3]);
+  }
+
+  function renderTurnInfo() {
+    const b = state.battle;
+    const info = $('turn-info');
+    if (!b || !b.turn) return (info.textContent = '');
+    const left = b.turn.deadline ? ` (${Math.max(0, Math.ceil((b.turn.deadline - Date.now()) / 1000))}초)` : '';
+    info.classList.toggle('mine', isMyTurn());
+    info.textContent = isMyTurn() ? `내 차례!${left}` : `${b.turn.name}의 차례${b.turn.kind === 'monster' ? '…' : left}`;
+  }
+  setInterval(() => { if (state.battle) renderTurnInfo(); }, 500);
+
+  function renderBattleButtons() {
+    const b = state.battle;
+    const mine = isMyTurn();
+    const me = b.party.find((p) => b.me && p.id === b.me.id);
+    const box = $('battle-buttons');
+    const back = el('button', { class: 'secondary wide', text: '← 뒤로', onclick: () => { state.battleMenu = 'main'; renderBattleButtons(); } });
+    if (state.battleMenu === 'skill') {
+      const list = b.me.skills.map((sk) => el('button', {
+        class: 'sub wide', onclick: () => battleAction({ action: 'skill', skill: sk.id }),
+      }, [`${sk.name}  (MP ${sk.mp})`, el('small', { text: sk.cooldown > 0 ? `${sk.cooldown}턴 뒤 사용 가능` : sk.desc })]));
+      list.forEach((btn, i) => { if (!b.me.skills[i].usable || !mine) btn.disabled = true; });
+      return box.replaceChildren(...list, back);
+    }
+    if (state.battleMenu === 'item') {
+      const list = b.me.items.map((it) => el('button', {
+        class: 'sub wide', onclick: () => battleAction({ action: 'item', item: it.id }),
+      }, [`${it.name} ×${it.count}`, el('small', { text: it.desc })]));
+      for (const btn of list) btn.disabled = !mine;
+      if (!list.length) list.push(el('p', { class: 'muted', text: '쓸 수 있는 아이템이 없다.' }));
+      return box.replaceChildren(...list, back);
+    }
+    const buttons = [
+      el('button', { text: '공격', onclick: () => battleAction({ action: 'attack' }) }),
+      el('button', { text: '스킬', onclick: () => { state.battleMenu = 'skill'; renderBattleButtons(); } }),
+      el('button', { text: '아이템', onclick: () => { state.battleMenu = 'item'; renderBattleButtons(); } }),
+      el('button', { text: '방어', onclick: () => battleAction({ action: 'defend' }) }),
+      el('button', { class: 'secondary wide', text: '도주', onclick: () => battleAction({ action: 'flee' }) }),
+    ];
+    for (const btn of buttons) btn.disabled = !mine;
+    if (me && me.down) box.replaceChildren(el('p', { class: 'muted wide', text: '쓰러져 있다… 동료들이 싸우는 것을 지켜본다.' }));
+    else box.replaceChildren(...buttons);
+  }
+
+  let acting = false;
+  async function battleAction(cmd) {
+    if (acting) return;
+    acting = true;
+    const res = await request('battle:action', cmd);
+    acting = false;
+    if (res.error) return toast(res.error);
+    state.battleMenu = 'main';
+    if (state.battle) renderBattleButtons();
+  }
+
+  function showResult(data) {
+    const c = data.character;
+    const lines = [];
+    let title;
+    let cls;
+    if (data.result === 'victory') {
+      title = '승리!';
+      cls = 'victory';
+      lines.push(`경험치 +${data.exp}`, `골드 +${data.gold}`);
+      lines.push(data.items.length ? `획득: ${data.items.join(', ')}` : '획득한 아이템 없음');
+      if (data.levelUp) lines.push(`레벨 업! Lv.${c.level} — 스탯 포인트 +${data.levelUp * 3} (캐릭터 메뉴에서 분배)`);
+    } else if (data.result === 'defeat') {
+      title = '패배…';
+      cls = 'defeat';
+      lines.push('본부로 옮겨졌다. 상처는 모두 아물었다.', `골드 -${data.goldLost}`);
+    } else {
+      title = '도주';
+      cls = '';
+      lines.push('무사히 전투에서 벗어났다. 토벌 이벤트는 그대로 남아 있다.');
+    }
+    openModal(el('div', { class: 'result' }, [
+      el('div', { class: `big ${cls}`, text: title }),
+      ...lines.map((t) => el('p', { text: t })),
+    ]));
   }
 
   function addChat(msg) {
@@ -311,7 +522,7 @@
     const li = el('li', { class: msg.channel, 'data-channel': msg.channel }, [
       avatar(msg.from.name, msg.from.avatarUrl, true),
       el('span', {}, [
-        el('span', { class: 'tag', text: msg.channel === 'global' ? '[전체]' : '[지역]' }),
+        el('span', { class: 'tag', text: { global: '[전체]', battle: '[전투]' }[msg.channel] || '[지역]' }),
         el('span', { class: 'name', text: msg.from.name }),
         msg.text,
       ]),
@@ -319,6 +530,12 @@
     list.append(li);
     while (list.children.length > 150) list.firstChild.remove();
     list.scrollTop = list.scrollHeight;
+    if (msg.channel === 'battle' && state.battle) {
+      // 전투 중 채팅은 프사 옆 말풍선으로도 5초간 띄운다.
+      state.bubbles.set(msg.from.id, { text: msg.text, until: Date.now() + 5000 });
+      renderSlots();
+      setTimeout(() => { if (state.battle) renderSlots(); }, 5100);
+    }
   }
 
   $('chat-form').addEventListener('submit', async (e) => {
@@ -333,25 +550,9 @@
 
   // ---------- 하단 메뉴 ----------
   const menus = {
-    character() {
-      const c = state.character;
-      const rows = [
-        ['성별', optionName('genders', c.gender)],
-        ['속성', optionName('elements', c.element)],
-        ['클래스', optionName('classes', c.class)],
-        ['계약 신', optionName('gods', c.god)],
-        ['경험치', c.exp],
-        ...Object.keys(STAT_NAMES).map((k) => [STAT_NAMES[k], c.stats[k]]),
-        ['남은 스탯 포인트', c.statPoints],
-        ['최대 HP', c.derived.maxHp],
-        ['최대 MP', c.derived.maxMp],
-        ['회피율', `${c.derived.evasion}%`],
-        ['치명타율', `${c.derived.crit}%`],
-      ];
-      openModal(el('div', {}, [
-        el('h2', { text: `${c.name}  Lv.${c.level}` }),
-        el('table', { class: 'info-table' }, rows.map(([k, v]) => el('tr', {}, [el('td', { text: k }), el('td', { text: String(v) })]))),
-      ]));
+    async character() {
+      const inv = await request('inventory:list');
+      renderCharacterInfo(inv.items || []);
     },
     async map() {
       const res = await request('map:view');
@@ -373,5 +574,48 @@
     },
     logout,
   };
+  function renderCharacterInfo(items) {
+    const c = state.character;
+    const canAllocate = c.statPoints > 0 && !state.battle;
+    const row = (k, v) => el('tr', {}, [el('td', { text: k }), el('td', { text: String(v) })]);
+    const statRow = (k) => el('tr', { class: 'stat-row' }, [
+      el('td', { text: STAT_NAMES[k] }),
+      el('td', {}, [String(c.stats[k]), canAllocate ? el('button', { text: '+', onclick: () => allocate(k, items) }) : null]),
+    ]);
+    openModal(el('div', {}, [
+      el('h2', { text: `${c.name}  Lv.${c.level}` }),
+      el('table', { class: 'info-table' }, [
+        row('성별', optionName('genders', c.gender)),
+        row('속성', optionName('elements', c.element)),
+        row('클래스', optionName('classes', c.class)),
+        row('계약 신', optionName('gods', c.god)),
+        row('경험치', c.expToNext ? `${c.exp} / ${c.expToNext}` : '최대 레벨'),
+        row('HP', `${c.hp} / ${c.derived.maxHp}`),
+        row('MP', `${c.mp} / ${c.derived.maxMp}`),
+        ...Object.keys(STAT_NAMES).map(statRow),
+        row('남은 스탯 포인트', c.statPoints),
+        row('회피율', `${c.derived.evasion}%`),
+        row('치명타율', `${c.derived.crit}%`),
+      ]),
+      el('h3', { text: '스킬' }),
+      el('ul', {}, [
+        ...c.skills.map((sk) => el('li', { text: `${sk.name} (MP ${sk.mp}) — ${sk.desc}` })),
+        c.nextSkill ? el('li', { class: 'muted', text: `Lv.${c.nextSkill}에 새 스킬 해금` }) : null,
+      ]),
+      el('h3', { text: '소지품' }),
+      items.length
+        ? el('ul', {}, items.map((it) => el('li', { text: `${it.name} ×${it.count} — ${it.desc}` })))
+        : el('p', { class: 'muted', text: '아무것도 없다.' }),
+    ]));
+  }
+
+  async function allocate(stat, items) {
+    const res = await request('stat:allocate', { stat });
+    if (res.error) return toast(res.error);
+    state.character = res.character;
+    renderStatus();
+    renderCharacterInfo(items);
+  }
+
   for (const btn of document.querySelectorAll('[data-menu]')) btn.addEventListener('click', () => menus[btn.dataset.menu]());
 })();

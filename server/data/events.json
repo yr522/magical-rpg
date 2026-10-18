@@ -1,0 +1,13 @@
+{
+  "_설명": "고정 토벌 이벤트. permanent: true면 제한시간 없이 계속 남고, 처치해도 다시 나타난다.",
+  "events": [
+    {
+      "id": "test_vine",
+      "zone": "park_core",
+      "monster": "vine_devourer",
+      "grade": "약함",
+      "permanent": true,
+      "label": "테스트용 상시 토벌"
+    }
+  ]
+}

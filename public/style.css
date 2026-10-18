@@ -79,7 +79,9 @@ legend { color: var(--muted); padding: 0 4px; }
 }
 .statusbar strong { color: var(--accent); }
 .field { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 320px; }
-.field-main { display: flex; flex-direction: column; min-height: 0; padding: 16px; gap: 12px; }
+.field-main { display: flex; flex-direction: column; min-height: 0; padding: 16px; }
+.field-view, .battle-view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.actions button.raid { border-color: var(--danger); color: var(--danger); }
 .log { flex: 1; overflow-y: auto; white-space: pre-wrap; }
 .log .entry { margin: 0 0 10px; }
 .log .place { font-size: 1.1rem; color: var(--accent); font-weight: 600; margin-top: 8px; }
@@ -115,7 +117,64 @@ legend { color: var(--muted); padding: 0 4px; }
 .connection { top: 8px; background: var(--panel-2); border: 1px solid var(--line); }
 .toast { bottom: 72px; background: var(--danger); color: #1a0b0e; font-weight: 600; }
 
+/* 전투 화면 */
+.bar { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--danger); transition: width .3s; }
+.bar.hp > span { background: #6fd39b; }
+.bar.mp > span { background: #6fa8ff; }
+.enemy { background: var(--panel); border: 1px solid var(--danger); border-radius: 12px; padding: 12px 16px; }
+.enemy .name { font-size: 1.1rem; font-weight: 600; color: var(--danger); }
+.enemy .bar { height: 12px; margin: 6px 0; }
+.battle-grid { display: grid; grid-template-columns: 1fr minmax(180px, 1.2fr) 1fr; gap: 10px; align-items: start; }
+.slots { display: flex; flex-direction: row; gap: 8px; }
+.slot {
+  position: relative; flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: .85rem;
+}
+.slot.empty { border-style: dashed; color: var(--muted); justify-content: center; min-height: 110px; }
+.slot.turn { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+.slot.down { opacity: .45; }
+.slot .avatar { width: 48px; height: 48px; }
+.slot .bar { width: 100%; }
+.slot .slot-name { font-weight: 600; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.slot .status { color: var(--muted); font-size: .75rem; text-align: center; }
+.bubble {
+  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  background: var(--text); color: var(--bg); padding: 6px 10px; border-radius: 10px; font-size: .85rem;
+  width: max-content; max-width: 180px; z-index: 2; word-break: break-word;
+}
+.bubble::after { content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: var(--text); }
+.battle-menu { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.turn-info { margin: 0 0 8px; text-align: center; font-weight: 600; }
+.turn-info.mine { color: var(--accent); }
+.battle-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.battle-buttons button { padding: 8px; font-size: .9rem; }
+.battle-buttons button.wide { grid-column: 1 / -1; }
+.battle-buttons .sub { background: var(--panel-2); color: var(--text); border-color: var(--line); font-weight: 400; text-align: left; }
+.battle-buttons .sub small { display: block; color: var(--muted); }
+.battle-log { font-size: .9rem; }
+.chat-log .battle .tag { color: var(--danger); }
+.chat-log .notice { color: var(--global); font-size: .9rem; }
+.result { text-align: center; }
+.result .big { font-size: 1.6rem; font-weight: 700; margin: 8px 0; }
+.result .victory { color: var(--accent); }
+.result .defeat { color: var(--danger); }
+.stat-row button { padding: 2px 10px; margin-left: 8px; }
+
 @media (max-width: 760px) {
+  .battle-grid { grid-template-columns: 1fr 1.3fr 1fr; gap: 6px; }
+  .slots { flex-direction: column; }
+  .slot { min-height: 0; padding: 6px; }
+  .slot.empty { min-height: 70px; }
+  .slot .avatar { width: 36px; height: 36px; }
+  .battle-buttons { grid-template-columns: 1fr; }
+  .field-main { padding: 10px; overflow-y: auto; }
+  .field-view { min-height: 100%; }
+  .battle-view { flex: none; gap: 8px; }
+  .battle-log { flex: none; max-height: 140px; }
+  .enemy { padding: 8px 12px; }
+  .enemy .muted, .slot .muted { display: none; }
+  .in-battle .field { grid-template-rows: minmax(0, 2.2fr) minmax(0, 1fr); }
   .field { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
   .field-side { border-left: none; border-top: 1px solid var(--line); }
   .players { max-height: 25%; }
