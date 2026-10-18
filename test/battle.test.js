@@ -109,18 +109,19 @@ test('공격 · 스킬 · 쿨다운 · 아이템 · 승리 보상 · 레벨업',
   assert.ok((await s.call('raid:enter', { eventId: 'test_vine' })).ok);
   assert.match((await s.call('move', { to: 'park_forest' })).error, /전투 중/);
 
-  // AGI 5 > 몬스터 4 이므로 내가 먼저. 기본 공격 = (STR7×2+1 − 방어6×0.5) = 12
+  // AGI 5 > 몬스터 4 이므로 내가 먼저. 기본 장비(견습 마법봉 STR+1 MAG+1) 포함.
+  // 기본 공격 = (STR8×2+1 − 방어6×0.5) = 14
   let v = await until(s, myTurn);
   assert.strictEqual(v.monster.hp, 160);
   assert.ok((await s.call('battle:action', { action: 'attack' })).ok);
   v = await until(s, (x) => myTurn(x) && x.latest.round === 2 && x.latest);
-  assert.strictEqual(v.monster.hp, 148);
+  assert.strictEqual(v.monster.hp, 146);
   assert.ok(v.party[0].hp < v.party[0].maxHp, '몬스터에게 맞았어야 함');
 
-  // 별빛 일격: (MAG10×2+1)×1.6 − 3 = 30.6 → 31, MP 8 소모, 다음 차례엔 쿨다운
+  // 별빛 일격: (MAG11×2+1)×1.6 − 3 = 33.8 → 34, MP 8 소모, 다음 차례엔 쿨다운
   assert.ok((await s.call('battle:action', { action: 'skill', skill: 'star_strike' })).ok);
   v = await until(s, (x) => myTurn(x) && x.latest.round === 3 && x.latest);
-  assert.strictEqual(v.monster.hp, 117);
+  assert.strictEqual(v.monster.hp, 112);
   assert.strictEqual(v.party[0].mp, v.party[0].maxMp - 8);
   assert.match((await s.call('battle:action', { action: 'skill', skill: 'star_strike' })).error, /아직/);
   assert.match((await s.call('battle:action', { action: 'skill', skill: 'rift_break' })).error, /쓸 수 없는/);
@@ -150,7 +151,7 @@ test('공격 · 스킬 · 쿨다운 · 아이템 · 승리 보상 · 레벨업',
   assert.strictEqual(end.exp, 60);
   assert.strictEqual(end.gold, 40);
   assert.strictEqual(end.levelUp, 1);
-  assert.deepStrictEqual(end.items, ['균열 파편']); // 난수 0.5 → 확률 60%짜리만 나온다
+  assert.deepStrictEqual(end.items.map((i) => i.name), ['균열 파편']); // 난수 0.5 → 확률 60%짜리만 나온다
   assert.strictEqual(end.character.level, 2);
   assert.strictEqual(end.character.exp, 10);
   assert.strictEqual(end.character.statPoints, 3);
@@ -163,11 +164,12 @@ test('공격 · 스킬 · 쿨다운 · 아이템 · 승리 보상 · 레벨업',
   assert.strictEqual(saved.level, 2);
   assert.strictEqual(saved.gold, 140);
   const inv = await s.call('inventory:list');
-  assert.ok(inv.items.some((i) => i.id === 'rift_shard'));
+  assert.ok(inv.stacks.some((i) => i.code === 'rift_shard'));
 
   // 스탯 분배
   const alloc = await s.call('stat:allocate', { stat: 'vit' });
-  assert.strictEqual(alloc.character.stats.vit, 6);
+  assert.strictEqual(alloc.character.baseStats.vit, 6);
+  assert.strictEqual(alloc.character.stats.vit, 7); // 견습 리본 VIT+1 포함
   assert.strictEqual(alloc.character.statPoints, 2);
   assert.strictEqual(alloc.character.hp, alloc.character.derived.maxHp);
   assert.ok((await s.call('stat:allocate', { stat: 'hp' })).error);

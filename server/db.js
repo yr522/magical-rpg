@@ -9,7 +9,9 @@ const CHARACTER_COLUMNS = [
 ];
 
 // 게임 진행 중 바뀌는 캐릭터 컬럼. updateCharacter는 이 컬럼만 고친다.
-const MUTABLE_COLUMNS = ['level', 'exp', 'gold', 'str', 'mag', 'vit', 'agi', 'luk', 'stat_points', 'hp', 'mp', 'location_id'];
+const MUTABLE_COLUMNS = [
+  'level', 'exp', 'gold', 'str', 'mag', 'vit', 'agi', 'luk', 'stat_points', 'hp', 'mp', 'location_id', 'starter_equipment',
+];
 
 const pickMutable = (fields) => Object.entries(fields).filter(([k]) => MUTABLE_COLUMNS.includes(k));
 
@@ -19,6 +21,19 @@ function countItems(codes) {
   for (const code of codes) counts.set(code, (counts.get(code) || 0) + 1);
   return [...counts].map(([code, count]) => ({ code, count }));
 }
+
+// 새 아이템은 코드 문자열이나 { code, grade, options, slot, equipped } 둘 다 받는다.
+const normalizeItem = (x) => (typeof x === 'string' ? { code: x } : x);
+
+// 아이템 한 줄을 화면/게임 코드에서 쓰는 모양으로.
+const itemRow = (r) => ({
+  id: Number(r.id),
+  code: r.item_code,
+  grade: r.grade || null,
+  options: r.options || {},
+  equipped: Boolean(r.is_equipped),
+  slot: r.slot || null,
+});
 
 function createPostgresStore(connectionString) {
   const { Pool } = require('pg');
@@ -93,16 +108,76 @@ function createPostgresStore(connectionString) {
       const sets = entries.map(([k], i) => `${k} = $${i + 2}`).join(', ');
       await pool.query(`UPDATE characters SET ${sets} WHERE id = $1`, [id, ...entries.map(([, v]) => v)]);
     },
-    async addItems(ownerId, codes) {
-      if (!codes.length) return;
-      await pool.query(
-        'INSERT INTO items (owner_id, item_code) SELECT $1, unnest($2::text[])',
-        [ownerId, codes],
+    async addItems(ownerId, list, client = pool) {
+      if (!list.length) return;
+      const values = [];
+      const tuples = list.map(normalizeItem).map((it) => {
+        values.push(ownerId, it.code, it.grade || null, JSON.stringify(it.options || {}), it.slot || null, Boolean(it.equipped));
+        const n = values.length;
+        return `($${n - 5}, $${n - 4}, $${n - 3}, $${n - 2}::jsonb, $${n - 1}, $${n})`;
+      });
+      await client.query(
+        `INSERT INTO items (owner_id, item_code, grade, options, slot, is_equipped) VALUES ${tuples.join(', ')}`,
+        values,
       );
     },
     async listItems(ownerId) {
-      const { rows } = await pool.query('SELECT item_code FROM items WHERE owner_id = $1 ORDER BY id', [ownerId]);
+      const { rows } = await pool.query('SELECT item_code FROM items WHERE owner_id = $1 AND NOT is_equipped ORDER BY id', [ownerId]);
       return countItems(rows.map((r) => r.item_code));
+    },
+    async listItemRows(ownerId) {
+      const { rows } = await pool.query('SELECT * FROM items WHERE owner_id = $1 ORDER BY id', [ownerId]);
+      return rows.map(itemRow);
+    },
+    // 골드 변경 + 아이템 삭제 + 아이템 추가를 한 번에(트랜잭션) 처리한다.
+    // 지울 아이템이 내 것이 아니거나 장착 중이면 아무것도 바꾸지 않고 false.
+    async applyChange(ownerId, { gold, removeIds = [], add = [] }) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        if (removeIds.length) {
+          const { rowCount } = await client.query(
+            'DELETE FROM items WHERE owner_id = $1 AND id = ANY($2::bigint[]) AND NOT is_equipped',
+            [ownerId, removeIds],
+          );
+          if (rowCount !== new Set(removeIds).size) {
+            await client.query('ROLLBACK');
+            return false;
+          }
+        }
+        await this.addItems(ownerId, add, client);
+        if (gold !== undefined) await client.query('UPDATE characters SET gold = $1 WHERE id = $2', [gold, ownerId]);
+        await client.query('COMMIT');
+        return true;
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    },
+    // 장착: 같은 칸의 다른 장비를 빼고 이 장비를 낀다. 해제: equip=false.
+    async setEquipped(ownerId, itemId, equip) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows } = await client.query('SELECT slot FROM items WHERE id = $1 AND owner_id = $2 FOR UPDATE', [itemId, ownerId]);
+        if (!rows.length || !rows[0].slot) {
+          await client.query('ROLLBACK');
+          return false;
+        }
+        if (equip) {
+          await client.query('UPDATE items SET is_equipped = false WHERE owner_id = $1 AND slot = $2 AND is_equipped', [ownerId, rows[0].slot]);
+        }
+        await client.query('UPDATE items SET is_equipped = $3 WHERE id = $1 AND owner_id = $2', [itemId, ownerId, equip]);
+        await client.query('COMMIT');
+        return true;
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
     },
     // 아이템 하나를 없앤다. 실제로 하나 지웠을 때만 true (두 번 눌러도 하나만 쓰인다).
     async consumeItem(ownerId, code) {
@@ -162,6 +237,7 @@ function createFileStore(filePath) {
         ...Object.fromEntries(CHARACTER_COLUMNS.map((c) => [c, c === 'user_id' ? userId : character[c]])),
         profile_text: '',
         avatar_url: null,
+        starter_equipment: false,
         created_at: new Date().toISOString(),
       };
       data.characters.push(row);
@@ -189,15 +265,48 @@ function createFileStore(filePath) {
       for (const [k, v] of pickMutable(fields)) row[k] = v;
       save();
     },
-    async addItems(ownerId, codes) {
-      if (!codes.length) return;
-      for (const code of codes) {
-        data.items.push({ id: data.nextItemId++, owner_id: ownerId, item_code: code, enhance: 0, is_equipped: false, slot: null });
+    async addItems(ownerId, list, { skipSave = false } = {}) {
+      if (!list.length) return;
+      for (const it of list.map(normalizeItem)) {
+        data.items.push({
+          id: data.nextItemId++,
+          owner_id: ownerId,
+          item_code: it.code,
+          grade: it.grade || null,
+          options: it.options || {},
+          enhance: 0,
+          is_equipped: Boolean(it.equipped),
+          slot: it.slot || null,
+        });
       }
-      save();
+      if (!skipSave) save();
     },
     async listItems(ownerId) {
-      return countItems(data.items.filter((i) => i.owner_id === ownerId).map((i) => i.item_code));
+      return countItems(data.items.filter((i) => i.owner_id === ownerId && !i.is_equipped).map((i) => i.item_code));
+    },
+    async listItemRows(ownerId) {
+      return data.items.filter((i) => i.owner_id === ownerId).map(itemRow);
+    },
+    async applyChange(ownerId, { gold, removeIds = [], add = [] }) {
+      const ids = new Set(removeIds);
+      const removable = data.items.filter((i) => ids.has(i.id) && i.owner_id === ownerId && !i.is_equipped);
+      if (removable.length !== ids.size) return false;
+      data.items = data.items.filter((i) => !removable.includes(i));
+      await this.addItems(ownerId, add, { skipSave: true });
+      if (gold !== undefined) {
+        const row = data.characters.find((c) => c.id === ownerId);
+        if (row) row.gold = gold;
+      }
+      save();
+      return true;
+    },
+    async setEquipped(ownerId, itemId, equip) {
+      const item = data.items.find((i) => i.id === itemId && i.owner_id === ownerId);
+      if (!item || !item.slot) return false;
+      if (equip) for (const i of data.items) if (i.owner_id === ownerId && i.slot === item.slot) i.is_equipped = false;
+      item.is_equipped = equip;
+      save();
+      return true;
     },
     async consumeItem(ownerId, code) {
       const index = data.items.findIndex((i) => i.owner_id === ownerId && i.item_code === code && !i.is_equipped);

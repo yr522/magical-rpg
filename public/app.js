@@ -293,6 +293,7 @@
     const zone = state.zone;
     const buttons = zone.events.map((ev) => el('button', { class: 'raid', text: `⚔ 입장 · ${ev.monsterName}`, onclick: () => enterRaid(ev.id) }));
     buttons.push(...zone.exits.map((exit) => el('button', { class: 'move', text: exit.label, onclick: () => move(exit.to) })));
+    if (zone.shop) buttons.push(el('button', { class: 'shop', text: `🛒 ${zone.shop.name}`, onclick: () => openShop('buy') }));
     buttons.push(el('button', { text: '둘러보기', onclick: look }));
     buttons.push(el('button', { text: '토벌 목록', onclick: raidList }));
     $('actions').replaceChildren(...buttons);
@@ -508,7 +509,7 @@
       title = '승리!';
       cls = 'victory';
       lines.push(`경험치 +${data.exp}`, `골드 +${data.gold}`);
-      lines.push(data.items.length ? `획득: ${data.items.join(', ')}` : '획득한 아이템 없음');
+      if (!data.items.length) lines.push('획득한 아이템 없음');
       if (data.levelUp) lines.push(`레벨 업! Lv.${c.level} — 스탯 포인트 +${data.levelUp * 3} (캐릭터 메뉴에서 분배)`);
     } else if (data.result === 'defeat') {
       title = '패배…';
@@ -522,6 +523,7 @@
     openModal(el('div', { class: 'result' }, [
       el('div', { class: `big ${cls}`, text: title }),
       ...lines.map((t) => el('p', { text: t })),
+      ...(data.items || []).map((it) => el('p', {}, ['획득: ', itemName(it), it.stats ? el('span', { class: 'muted', text: ` (${statText(it.stats)})` }) : null])),
     ]));
   }
 
@@ -558,9 +560,11 @@
 
   // ---------- 하단 메뉴 ----------
   const menus = {
-    async character() {
-      const inv = await request('inventory:list');
-      renderCharacterInfo(inv.items || []);
+    character() {
+      renderCharacterInfo();
+    },
+    inventory() {
+      openInventory();
     },
     async map() {
       const res = await request('map:view');
@@ -582,14 +586,21 @@
     },
     logout,
   };
-  function renderCharacterInfo(items) {
+  function renderCharacterInfo() {
     const c = state.character;
     const canAllocate = c.statPoints > 0 && !state.battle;
     const row = (k, v) => el('tr', {}, [el('td', { text: k }), el('td', { text: String(v) })]);
-    const statRow = (k) => el('tr', { class: 'stat-row' }, [
-      el('td', { text: STAT_NAMES[k] }),
-      el('td', {}, [String(c.stats[k]), canAllocate ? el('button', { text: '+', onclick: () => allocate(k, items) }) : null]),
-    ]);
+    const statRow = (k) => {
+      const bonus = c.stats[k] - c.baseStats[k];
+      return el('tr', { class: 'stat-row' }, [
+        el('td', { text: STAT_NAMES[k] }),
+        el('td', {}, [
+          String(c.stats[k]),
+          bonus ? el('span', { class: 'bonus', text: ` (장비 +${bonus})` }) : null,
+          canAllocate ? el('button', { text: '+', onclick: () => allocate(k) }) : null,
+        ]),
+      ]);
+    };
     openModal(el('div', {}, [
       el('h2', { text: `${c.name}  Lv.${c.level}` }),
       el('table', { class: 'info-table' }, [
@@ -610,19 +621,134 @@
         ...c.skills.map((sk) => el('li', { text: `${sk.name} (MP ${sk.mp}) — ${sk.desc}` })),
         c.nextSkill ? el('li', { class: 'muted', text: `Lv.${c.nextSkill}에 새 스킬 해금` }) : null,
       ]),
-      el('h3', { text: '소지품' }),
-      items.length
-        ? el('ul', {}, items.map((it) => el('li', { text: `${it.name} ×${it.count} — ${it.desc}` })))
-        : el('p', { class: 'muted', text: '아무것도 없다.' }),
+      el('h3', { text: '장비' }),
+      el('ul', {}, Object.entries(c.equipment).map(([slot, it]) => el('li', {}, [
+        `${SLOT_NAMES[slot]}: `,
+        it ? itemName(it) : el('span', { class: 'muted', text: '없음' }),
+        it ? el('span', { class: 'muted', text: ` (${statText(it.stats)})` }) : null,
+      ]))),
+      el('button', { class: 'secondary', text: '인벤토리 열기', onclick: () => openInventory() }),
     ]));
   }
 
-  async function allocate(stat, items) {
+  async function allocate(stat) {
     const res = await request('stat:allocate', { stat });
     if (res.error) return toast(res.error);
     state.character = res.character;
     renderStatus();
-    renderCharacterInfo(items);
+    renderCharacterInfo();
+  }
+
+  // ---------- 인벤토리 · 상점 ----------
+  const SLOT_NAMES = { weapon: '무기', outfit: '의상', accessory: '장신구' };
+  const SHORT_STAT = { str: 'STR', mag: 'MAG', vit: 'VIT', agi: 'AGI', luk: 'LUK' };
+  const statText = (stats) => Object.entries(stats).filter(([, v]) => v).map(([k, v]) => `${SHORT_STAT[k]}+${v}`).join(' ') || '보너스 없음';
+  // 장비 이름은 등급 색으로, 앞에 [등급]을 붙인다.
+  const itemName = (it) => el('span', { class: 'item-name', style: it.color ? `color:${it.color}` : '', text: it.gradeName ? `[${it.gradeName}] ${it.name}` : it.name });
+
+  // 인벤토리·상점 명령 결과를 받아 상태를 고치고 같은 창을 다시 그린다.
+  async function itemAction(event, payload, rerender, confirmText) {
+    if (confirmText && !confirm(confirmText)) return;
+    const res = await request(event, payload);
+    if (res.error) return toast(res.error);
+    state.character = res.character;
+    renderStatus();
+    rerender(res, res.message);
+  }
+
+  async function openInventory() {
+    const res = await request('inventory:list');
+    if (res.error) return toast(res.error);
+    renderInventory(res);
+  }
+
+  function renderInventory(inv, message) {
+    const again = (res, msg) => renderInventory(res, msg);
+    const equipCard = (it) => el('div', { class: `item-card ${it.equipped ? 'equipped' : ''}` }, [
+      itemName(it),
+      el('div', { class: 'item-meta', text: `${it.slotName} · ${statText(it.stats)}${it.equipped ? ' · 장착 중' : ''}` }),
+      el('div', { class: 'item-meta', text: it.desc }),
+      el('div', { class: 'row' }, it.equipped
+        ? [el('button', { class: 'secondary', text: '벗기', onclick: () => itemAction('inventory:unequip', { id: it.id }, again) })]
+        : [
+          el('button', { text: '장착', onclick: () => itemAction('inventory:equip', { id: it.id }, again) }),
+          el('button', { class: 'secondary', text: `분해 (파편 ${it.shards})`, onclick: () => itemAction('inventory:disassemble', { id: it.id }, again, `${it.name}을(를) 분해할까요? 되돌릴 수 없습니다.`) }),
+          el('button', { class: 'danger', text: '버리기', onclick: () => itemAction('inventory:discard', { id: it.id }, again, `${it.name}을(를) 버릴까요? 되돌릴 수 없습니다.`) }),
+        ]),
+    ]);
+    const stackCard = (it) => el('div', { class: 'item-card' }, [
+      el('span', { class: 'item-name', text: `${it.name} ×${it.count}` }),
+      el('div', { class: 'item-meta', text: it.desc }),
+      el('div', { class: 'row' }, [
+        it.kind === 'consumable' ? el('button', { text: '사용', onclick: () => itemAction('inventory:use', { code: it.code }, again) }) : null,
+        el('button', { class: 'danger', text: '1개 버리기', onclick: () => itemAction('inventory:discard', { code: it.code }, again, `${it.name} 1개를 버릴까요?`) }),
+      ]),
+    ]);
+    const worn = inv.equipment.filter((e) => e.equipped);
+    const bag = inv.equipment.filter((e) => !e.equipped);
+    openModal(el('div', {}, [
+      el('h2', { text: '인벤토리' }),
+      el('p', { class: 'muted', text: `골드 ${inv.character.gold} G${state.battle ? ' · 전투 중에는 바꿀 수 없다' : ''}` }),
+      el('p', { class: 'inv-message', text: message || '' }),
+      el('h3', { text: '장착 중' }),
+      ...Object.keys(SLOT_NAMES).map((slot) => {
+        const it = worn.find((e) => e.slot === slot);
+        return it ? equipCard(it) : el('div', { class: 'item-card muted', text: `${SLOT_NAMES[slot]}: 비어 있음` });
+      }),
+      el('h3', { text: `장비 (${bag.length})` }),
+      ...(bag.length ? bag.map(equipCard) : [el('p', { class: 'muted', text: '가방에 장비가 없다.' })]),
+      el('h3', { text: '소지품' }),
+      ...(inv.stacks.length ? inv.stacks.map(stackCard) : [el('p', { class: 'muted', text: '아무것도 없다.' })]),
+    ]));
+  }
+
+  async function openShop(tab, message) {
+    const res = await request('shop:view');
+    if (res.error) return toast(res.error);
+    renderShop(res, tab, message);
+  }
+
+  function renderShop(shop, tab, message) {
+    const again = (_res, msg) => openShop(tab, msg);
+    const tabs = el('div', { class: 'tabs' }, [
+      el('button', { class: tab === 'buy' ? '' : 'off', text: '구매', onclick: () => renderShop(shop, 'buy') }),
+      el('button', { class: tab === 'sell' ? '' : 'off', text: '판매', onclick: () => renderShop(shop, 'sell') }),
+    ]);
+    let body;
+    if (tab === 'buy') {
+      body = shop.goods.map((g) => el('div', { class: 'item-card' }, [
+        itemName(g),
+        el('span', { class: 'muted', text: `  ${g.price} G` }),
+        el('div', { class: 'item-meta', text: g.stats ? `${g.slotName} · ${statText(g.stats)}` : g.desc }),
+        el('div', { class: 'row' }, [
+          el('button', { text: '1개 구매', onclick: () => itemAction('shop:buy', { code: g.code }, again) }),
+          g.kind === 'consumable' ? el('button', { class: 'secondary', text: `5개 (${g.price * 5} G)`, onclick: () => itemAction('shop:buy', { code: g.code, count: 5 }, again) }) : null,
+        ]),
+      ]));
+    } else {
+      const sellEquip = shop.equipment.filter((e) => !e.equipped).map((it) => el('div', { class: 'item-card' }, [
+        itemName(it),
+        el('span', { class: 'muted', text: `  판매가 ${it.sellPrice} G` }),
+        el('div', { class: 'item-meta', text: `${it.slotName} · ${statText(it.stats)}` }),
+        el('div', { class: 'row' }, [el('button', {
+          text: '판매', onclick: () => itemAction('shop:sell', { id: it.id }, again, `${it.name}을(를) ${it.sellPrice} G에 팔까요?`),
+        })]),
+      ]));
+      const sellStacks = shop.stacks.map((it) => el('div', { class: 'item-card' }, [
+        el('span', { class: 'item-name', text: `${it.name} ×${it.count}` }),
+        el('span', { class: 'muted', text: `  개당 ${it.sellPrice} G` }),
+        el('div', { class: 'row' }, [el('button', { text: '1개 판매', onclick: () => itemAction('shop:sell', { code: it.code }, again) })]),
+      ]));
+      body = [...sellEquip, ...sellStacks];
+      if (!body.length) body.push(el('p', { class: 'muted', text: '팔 수 있는 물건이 없다. (장착 중인 장비는 벗어야 팔 수 있다)' }));
+    }
+    openModal(el('div', {}, [
+      el('h2', { text: shop.name }),
+      el('p', { class: 'muted', text: `가진 골드 ${shop.character.gold} G · 팔 때는 사는 값보다 훨씬 싸게 쳐준다.` }),
+      el('p', { class: 'inv-message', text: message || '' }),
+      tabs,
+      ...body,
+    ]));
   }
 
   for (const btn of document.querySelectorAll('[data-menu]')) btn.addEventListener('click', () => menus[btn.dataset.menu]());

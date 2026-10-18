@@ -117,6 +117,20 @@ legend { color: var(--muted); padding: 0 4px; }
 .connection { top: 8px; background: var(--panel-2); border: 1px solid var(--line); }
 .toast { bottom: 72px; background: var(--danger); color: #1a0b0e; font-weight: 600; }
 
+/* 인벤토리 · 상점 */
+.actions button.shop { border-color: var(--global); color: var(--global); }
+.item-card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; }
+.item-card .item-name { font-weight: 600; }
+.item-card .item-meta { color: var(--muted); font-size: .85rem; }
+.item-card .row { margin-top: 6px; }
+.item-card button { padding: 4px 10px; font-size: .85rem; }
+.item-card.equipped { border-color: var(--accent); }
+.tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.tabs button { flex: 1; }
+.tabs button.off { background: transparent; color: var(--accent); }
+.inv-message { color: var(--system); min-height: 1.2em; }
+.modal-body h3 { margin-top: 14px; }
+
 /* 전투 화면 */
 .bar { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
 .bar > span { display: block; height: 100%; background: var(--danger); transition: width .3s; }
