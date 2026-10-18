@@ -1,4 +1,6 @@
 // 게임 서버 진입점. 웹 페이지를 보여 주고, Socket.IO로 실시간 명령을 처리한다.
+const crypto = require('crypto');
+const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const express = require('express');
@@ -22,13 +24,24 @@ const DEATH_GOLD_PENALTY = 0.1;
 const zoneRoom = (zoneId) => `zone:${zoneId}`;
 const battleRoom = (eventId) => `battle:${eventId}`;
 const WORLD_ROOM = 'world';
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+
+// 화면 코드(public/)의 버전. 파일 내용이 바뀌면 값이 달라진다.
+// 업데이트 뒤 예전 화면이 열린 채로 다시 연결되면, 브라우저가 이 값을 보고 스스로 새로고침한다.
+function clientVersion() {
+  const hash = crypto.createHash('sha256');
+  for (const name of fs.readdirSync(PUBLIC_DIR).sort()) hash.update(name).update(fs.readFileSync(path.join(PUBLIC_DIR, name)));
+  return hash.digest('hex').slice(0, 12);
+}
 
 // battleOptions: { rng, turnMs, monsterDelayMs } — 테스트에서 전투 속도와 난수를 고정할 때 쓴다.
 function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions = {} }) {
   const rng = battleOptions.rng || Math.random;
   const app = express();
   app.get('/health', (_req, res) => res.send('ok'));
-  app.use(express.static(path.join(__dirname, '..', 'public')));
+  // no-cache: 브라우저가 매번 서버에 최신 파일인지 확인한다 (게임 파일이 작아서 부담 없음).
+  app.use(express.static(PUBLIC_DIR, { setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
+  const version = clientVersion();
 
   const httpServer = http.createServer(app);
   const io = new Server(httpServer);
@@ -256,6 +269,7 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
   const currentEntry = (socket) => online.get(socket.data.characterId);
 
   io.on('connection', (socket) => {
+    socket.emit('server:hello', { version });
     socket.data.userId = null;
     socket.data.characterId = null;
     socket.data.chatTimes = [];
