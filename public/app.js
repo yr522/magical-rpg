@@ -71,6 +71,14 @@
   $('modal-close').addEventListener('click', () => $('modal').classList.add('hidden'));
 
   // ---------- 접속 / 로그인 ----------
+  // 처음 접속했을 때의 서버 버전을 기억해 두고, 다시 연결됐을 때 버전이 바뀌었으면
+  // (서버가 업데이트됨) 새 화면을 받도록 새로고침한다. 게임 중이면 같은 캐릭터로 돌아온다.
+  let serverVersion = null;
+  socket.on('server:hello', ({ version }) => {
+    if (serverVersion && serverVersion !== version) location.reload();
+    serverVersion = version;
+  });
+
   socket.on('connect', async () => {
     $('connection').classList.add('hidden');
     if (!state.options) state.options = (await request('char:options')).options;
