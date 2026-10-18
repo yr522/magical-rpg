@@ -1,0 +1,13 @@
+{
+  "_설명": "buyRate: 플레이어가 살 때 기준 가격에 곱하는 값 (비싸게). sellRate: 플레이어가 팔 때 곱하는 값 (싸게). 상점마다 다르게 정할 수 있다. 상점은 일반 등급 장비만 판다.",
+  "shops": [
+    {
+      "id": "hq_shop",
+      "zone": "hq_shop",
+      "name": "본부 상점",
+      "buyRate": 1.0,
+      "sellRate": 0.4,
+      "sells": ["heal_candy", "mana_jelly", "star_rod", "steel_baton", "frill_dress", "wind_bell", "apprentice_wand", "apprentice_ribbon", "apprentice_brooch"]
+    }
+  ]
+}

@@ -84,9 +84,13 @@ test('캐릭터 생성 시 스탯 계산과 검증', async () => {
   const res = await s.call('char:create', newCharacter('세라핀', { classId: 'attacker', godId: 'god_mag' }));
   assert.ok(res.ok, res.error);
   // 기본 5 + 어태커(STR+2, MAG+2) + 마력의 신(MAG+3)
-  assert.deepStrictEqual(res.character.stats, { str: 7, mag: 10, vit: 5, agi: 5, luk: 5 });
-  assert.strictEqual(res.character.derived.maxHp, 50 + 5 * 10 + 5);
-  assert.strictEqual(res.character.derived.maxMp, 20 + 10 * 5);
+  assert.deepStrictEqual(res.character.baseStats, { str: 7, mag: 10, vit: 5, agi: 5, luk: 5 });
+  // 기본 장비: 견습 마법봉(STR+1 MAG+1), 견습 리본(VIT+1), 견습 브로치(LUK+1) — 처음부터 장착
+  assert.deepStrictEqual(res.character.stats, { str: 8, mag: 11, vit: 6, agi: 5, luk: 6 });
+  assert.strictEqual(res.character.equipment.weapon.name, '견습 마법봉');
+  assert.strictEqual(res.character.derived.maxHp, 50 + 6 * 10 + 5);
+  assert.strictEqual(res.character.hp, res.character.derived.maxHp, '장비 포함 최대 HP로 시작');
+  assert.strictEqual(res.character.derived.maxMp, 20 + 11 * 5);
   assert.strictEqual(res.character.locationId, 'hq_plaza');
 
   assert.match((await s.call('char:create', newCharacter('세라핀'))).error, /이미 있는/);

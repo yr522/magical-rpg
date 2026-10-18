@@ -13,6 +13,11 @@
     "heal_candy",
     "heal_candy"
   ],
+  "startEquipment": [
+    "apprentice_wand",
+    "apprentice_ribbon",
+    "apprentice_brooch"
+  ],
   "growth": {
     "statPointsPerLevel": 3,
     "maxLevel": 30,

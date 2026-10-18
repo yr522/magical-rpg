@@ -1,9 +1,36 @@
 {
-  "_설명": "use: 전투 중 사용 효과. hp/mp 회복량. 장비는 4단계에서 추가한다.",
+  "_설명": "kind: consumable(소모품) / material(재료) / equipment(장비). price는 기준 가격이고, 실제 사고파는 가격은 shops.json의 배율로 정한다. 장비의 stats는 '일반' 등급 기준이고, 등급 배율(grades.mult)을 곱해 반올림한다.",
+  "slots": [
+    { "id": "weapon", "name": "무기" },
+    { "id": "outfit", "name": "의상" },
+    { "id": "accessory", "name": "장신구" }
+  ],
+  "grades": [
+    { "id": "common", "name": "일반", "mult": 1.0, "weight": 55, "options": 0, "color": "#c9c5d6", "shards": 1 },
+    { "id": "uncommon", "name": "고급", "mult": 1.2, "weight": 28, "options": 1, "color": "#6fd39b", "shards": 2 },
+    { "id": "rare", "name": "희귀", "mult": 1.5, "weight": 12, "options": 1, "color": "#6fa8ff", "shards": 4 },
+    { "id": "hero", "name": "영웅", "mult": 1.9, "weight": 4, "options": 2, "color": "#c08bff", "shards": 8 },
+    { "id": "legend", "name": "전설", "mult": 2.4, "weight": 0.9, "options": 2, "color": "#ffaa55", "shards": 16 },
+    { "id": "myth", "name": "신화", "mult": 3.0, "weight": 0.1, "options": 3, "color": "#ff6b7a", "shards": 30 }
+  ],
   "items": [
     { "id": "heal_candy", "name": "회복 사탕", "kind": "consumable", "desc": "HP를 60 회복한다.", "use": { "hp": 60 }, "price": 20 },
     { "id": "mana_jelly", "name": "마나 젤리", "kind": "consumable", "desc": "MP를 30 회복한다.", "use": { "mp": 30 }, "price": 25 },
-    { "id": "rift_shard", "name": "균열 파편", "kind": "material", "desc": "날카로운 초록빛 조각. 아직 쓸 곳이 없다.", "price": 5 },
-    { "id": "rift_core", "name": "몬스터 핵", "kind": "material", "desc": "아직 미약하게 맥동한다.", "price": 30 }
+    { "id": "rift_shard", "name": "균열 파편", "kind": "material", "desc": "날카로운 초록빛 조각. 장비를 분해하면 나온다.", "price": 5 },
+    { "id": "rift_core", "name": "몬스터 핵", "kind": "material", "desc": "아직 미약하게 맥동한다.", "price": 30 },
+
+    { "id": "apprentice_wand", "name": "견습 마법봉", "kind": "equipment", "slot": "weapon", "stats": { "str": 1, "mag": 1 }, "price": 30, "desc": "계약 첫날 받는 마법봉. 손잡이에 이름표가 붙어 있다." },
+    { "id": "apprentice_ribbon", "name": "견습 리본", "kind": "equipment", "slot": "outfit", "stats": { "vit": 1 }, "price": 25, "desc": "변신하면 저절로 묶이는 리본." },
+    { "id": "apprentice_brooch", "name": "견습 브로치", "kind": "equipment", "slot": "accessory", "stats": { "luk": 1 }, "price": 25, "desc": "계약 신의 문장이 희미하게 새겨진 브로치." },
+
+    { "id": "star_rod", "name": "별가루 지팡이", "kind": "equipment", "slot": "weapon", "stats": { "mag": 2, "luk": 1 }, "price": 120, "desc": "끝에서 별가루가 떨어진다." },
+    { "id": "steel_baton", "name": "강철 지휘봉", "kind": "equipment", "slot": "weapon", "stats": { "str": 3 }, "price": 120, "desc": "마법봉이라기엔 너무 무겁다." },
+    { "id": "frill_dress", "name": "프릴 계약복", "kind": "equipment", "slot": "outfit", "stats": { "vit": 2, "agi": 1 }, "price": 140, "desc": "보기보다 질기다." },
+    { "id": "wind_bell", "name": "바람 방울", "kind": "equipment", "slot": "accessory", "stats": { "agi": 2 }, "price": 100, "desc": "흔들면 바람 소리가 난다." },
+
+    { "id": "vine_sickle", "name": "덩굴 낫", "kind": "equipment", "slot": "weapon", "stats": { "str": 3, "agi": 1 }, "price": 160, "desc": "덩굴 포식자의 팔이 굳어 만들어진 낫." },
+    { "id": "thorn_wand", "name": "가시덩굴 마법봉", "kind": "equipment", "slot": "weapon", "stats": { "mag": 4 }, "price": 180, "desc": "쥐면 손바닥이 조금 따끔하다." },
+    { "id": "leaf_cape", "name": "잎사귀 망토", "kind": "equipment", "slot": "outfit", "stats": { "vit": 3 }, "price": 150, "desc": "마른 잎이 겹겹이 엮인 망토. 바스락거린다." },
+    { "id": "green_core_brooch", "name": "초록 핵 브로치", "kind": "equipment", "slot": "accessory", "stats": { "mag": 1, "luk": 3 }, "price": 220, "desc": "몬스터 핵을 깎아 만든 브로치. 아직 따뜻하다." }
   ]
 }

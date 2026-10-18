@@ -46,3 +46,8 @@ CREATE TABLE IF NOT EXISTS items (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS items_owner_idx ON items (owner_id);
+
+-- 4단계: 장비 등급과 추가 옵션, 기본 장비 지급 여부. 이미 있는 DB에도 컬럼만 더한다.
+ALTER TABLE items ADD COLUMN IF NOT EXISTS grade TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS options JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS starter_equipment BOOLEAN NOT NULL DEFAULT false;

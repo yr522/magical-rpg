@@ -2,7 +2,8 @@
 const characterData = require('./data/character.json');
 const mapData = require('./data/map.json');
 const { monsters: monsterList } = require('./data/monsters.json');
-const { items: itemList } = require('./data/items.json');
+const { items: itemList, grades: gradeList, slots: slotList } = require('./data/items.json');
+const { shops: shopList } = require('./data/shops.json');
 const { skills: skillList } = require('./data/skills.json');
 const { events: eventList } = require('./data/events.json');
 
@@ -14,6 +15,9 @@ const regions = new Map(mapData.regions.map((r) => [r.id, r]));
 const monsters = new Map(monsterList.map((m) => [m.id, m]));
 const items = new Map(itemList.map((i) => [i.id, i]));
 const skills = new Map(skillList.map((s) => [s.id, s]));
+const grades = new Map(gradeList.map((g) => [g.id, g]));
+const slots = new Map(slotList.map((s) => [s.id, s]));
+const shops = new Map(shopList.map((s) => [s.id, s]));
 const { growth } = characterData;
 
 // 서버 시작 시 맵이 잘못 적혀 있으면 바로 알려 준다 (없는 구역으로 가는 출구 등).
@@ -36,9 +40,24 @@ function validateMap() {
   for (const code of characterData.startItems) {
     if (!items.has(code)) throw new Error(`character.json: startItems의 ${code} 아이템이 items.json에 없습니다`);
   }
+  for (const code of characterData.startEquipment) {
+    if (items.get(code)?.kind !== 'equipment') throw new Error(`character.json: startEquipment의 ${code}가 장비가 아닙니다`);
+  }
+  for (const item of itemList) {
+    if (item.kind === 'equipment' && !slots.has(item.slot)) throw new Error(`items.json: ${item.id}의 슬롯 ${item.slot}이 없습니다`);
+  }
   for (const m of monsterList) {
     for (const drop of m.drops) {
       if (!items.has(drop.item)) throw new Error(`monsters.json: ${m.id}의 드롭 ${drop.item}이 items.json에 없습니다`);
+      for (const g of drop.grades || []) {
+        if (!grades.has(g)) throw new Error(`monsters.json: ${m.id}의 드롭 등급 ${g}가 items.json grades에 없습니다`);
+      }
+    }
+  }
+  for (const shop of shopList) {
+    if (!zones.has(shop.zone)) throw new Error(`shops.json: ${shop.id}의 구역 ${shop.zone}이 없습니다`);
+    for (const code of shop.sells) {
+      if (!items.has(code)) throw new Error(`shops.json: ${shop.id}가 파는 ${code}가 items.json에 없습니다`);
     }
   }
   const classIds = new Set(characterData.classes.map((c) => c.id));
@@ -94,7 +113,7 @@ function gainExp(row, amount) {
   if (expToNext(row.level) === null) row.exp = 0;
   if (levels) {
     // 레벨업 시 HP/MP 전체 회복.
-    const { maxHp, maxMp } = derivedStats(statsOf(row), row.level);
+    const { maxHp, maxMp } = derivedStats(totalStats(row), row.level);
     row.hp = maxHp;
     row.mp = maxMp;
   }
@@ -103,9 +122,94 @@ function gainExp(row, amount) {
 
 const statsOf = (row) => Object.fromEntries(STAT_KEYS.map((k) => [k, row[k]]));
 
-// 전투용 수치 (장비가 생기면 여기에 더한다).
-function combatStats(row) {
+// ---------- 아이템 · 장비 ----------
+// 장비 "실물"은 { id, code, grade, options, equipped, slot } 모양이다.
+// 등급은 드롭될 때 정해지고, 기본 스탯에 등급 배율을 곱한 뒤 추가 옵션을 더한다.
+
+function equipmentStats(inst) {
+  const def = items.get(inst.code);
+  const grade = grades.get(inst.grade) || grades.get('common');
+  const result = Object.fromEntries(STAT_KEYS.map((k) => [k, 0]));
+  for (const [k, v] of Object.entries(def.stats || {})) result[k] += Math.max(1, Math.round(v * grade.mult));
+  for (const [k, v] of Object.entries(inst.options || {})) if (k in result) result[k] += v;
+  return result;
+}
+
+// 장비를 포함한 최종 스탯. row.equipment는 서버 메모리에만 있는 장착 장비 목록이다.
+function totalStats(row) {
   const stats = statsOf(row);
+  for (const inst of row.equipment || []) {
+    for (const [k, v] of Object.entries(equipmentStats(inst))) stats[k] += v;
+  }
+  return stats;
+}
+
+// 허용된 등급 중에서 grades.weight 비율로 등급을 고르고, 등급만큼 추가 옵션을 붙인다.
+function rollEquipment(code, allowed, rng) {
+  const pool = (allowed && allowed.length ? allowed : ['common']).map((id) => grades.get(id));
+  let pick = rng() * pool.reduce((sum, g) => sum + g.weight, 0);
+  const grade = pool.find((g) => (pick -= g.weight) < 0) || pool[pool.length - 1];
+  const options = {};
+  const bonus = grade.mult >= 1.9 ? 2 : 1;
+  for (let i = 0; i < grade.options; i++) {
+    const stat = STAT_KEYS[Math.floor(rng() * STAT_KEYS.length)];
+    options[stat] = (options[stat] || 0) + bonus;
+  }
+  return { code, grade: grade.id, options, slot: items.get(code).slot };
+}
+
+// 몬스터 드롭 목록을 굴려 새 아이템들을 만든다. 장비면 등급도 정한다.
+function rollDrops(drops, rng) {
+  const result = [];
+  for (const drop of drops) {
+    if (rng() >= drop.chance) continue;
+    const def = items.get(drop.item);
+    result.push(def.kind === 'equipment' ? rollEquipment(drop.item, drop.grades, rng) : { code: drop.item });
+  }
+  return result;
+}
+
+// 아이템의 기준 가치. 장비는 등급 배율과 옵션 수만큼 비싸진다.
+function itemValue(inst) {
+  const def = items.get(inst.code);
+  if (def.kind !== 'equipment') return def.price;
+  const grade = grades.get(inst.grade) || grades.get('common');
+  const optionCount = Object.values(inst.options || {}).reduce((a, b) => a + b, 0);
+  return def.price * grade.mult * (1 + 0.25 * optionCount);
+}
+
+// 상점에서 살 때는 비싸게(올림), 팔 때는 싸게(내림).
+const buyPrice = (shop, code) => Math.ceil(items.get(code).price * shop.buyRate);
+const sellPrice = (shop, inst) => Math.max(1, Math.floor(itemValue(inst) * shop.sellRate));
+// 분해하면 나오는 균열 파편 수.
+const disassembleShards = (inst) => (grades.get(inst.grade) || grades.get('common')).shards;
+
+function itemView(inst, shop) {
+  const def = items.get(inst.code);
+  const view = { id: inst.id, code: def.id, name: def.name, kind: def.kind, desc: def.desc };
+  if (def.kind === 'equipment') {
+    const grade = grades.get(inst.grade) || grades.get('common');
+    Object.assign(view, {
+      slot: def.slot,
+      slotName: slots.get(def.slot).name,
+      grade: grade.id,
+      gradeName: grade.name,
+      color: grade.color,
+      stats: equipmentStats(inst),
+      options: inst.options || {},
+      equipped: Boolean(inst.equipped),
+      shards: disassembleShards(inst),
+    });
+  }
+  if (shop) view.sellPrice = sellPrice(shop, inst);
+  return view;
+}
+
+const shopInZone = (zoneId) => shopList.find((s) => s.zone === zoneId) || null;
+
+// 전투용 수치 (장비 포함).
+function combatStats(row) {
+  const stats = totalStats(row);
   return {
     ...derivedStats(stats, row.level),
     physAtk: stats.str * 2 + row.level,
@@ -152,7 +256,8 @@ function buildNewCharacter(input) {
 
 // 클라이언트에 보낼 캐릭터 정보 (내부 컬럼 이름을 화면용으로 정리).
 function characterView(row) {
-  const stats = statsOf(row);
+  const base = statsOf(row);
+  const stats = totalStats(row);
   const zone = zones.get(row.location_id);
   return {
     id: row.id,
@@ -168,7 +273,12 @@ function characterView(row) {
     hp: row.hp,
     mp: row.mp,
     statPoints: row.stat_points,
+    baseStats: base,
     stats,
+    equipment: Object.fromEntries(slotList.map((sl) => {
+      const inst = (row.equipment || []).find((e) => e.slot === sl.id);
+      return [sl.id, inst ? itemView(inst) : null];
+    })),
     derived: derivedStats(stats, row.level),
     skills: skillsFor(row.class, row.level).map((sk) => ({ id: sk.id, name: sk.name, mp: sk.mp, desc: sk.desc })),
     nextSkill: (skillList.find((sk) => sk.class === row.class && sk.level > row.level) || {}).level || null,
@@ -198,6 +308,18 @@ module.exports = {
   monsters,
   items,
   skills,
+  grades,
+  slots,
+  shops,
+  totalStats,
+  equipmentStats,
+  rollEquipment,
+  rollDrops,
+  buyPrice,
+  sellPrice,
+  disassembleShards,
+  itemView,
+  shopInZone,
   eventList,
   expToNext,
   gainExp,

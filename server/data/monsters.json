@@ -1,5 +1,5 @@
 {
-  "_설명": "resist: 속성별 저항. weak(취약 ×1.5) / resist(내성 ×0.5) / immune(면역 ×0). 적지 않은 속성은 보통(×1.0).",
+  "_설명": "resist: 속성별 저항. weak(취약 ×1.5) / resist(내성 ×0.5) / immune(면역 ×0). 적지 않은 속성은 보통(×1.0). equipment 드롭: grades에 적힌 등급 중에서 grades.weight 비율로 등급이 정해진다.",
   "monsters": [
     {
       "id": "vine_devourer",
@@ -13,13 +13,66 @@
       "exp": 60,
       "gold": 40,
       "desc": "균열에서 흘러나온 덩굴이 사람의 형상을 흉내 낸 것. 가슴께에 초록빛 핵이 맥동한다.",
-      "resist": { "nature": "resist", "fire": "weak", "ice": "weak" },
-      "special": { "name": "덩굴 휘감기", "coef": 1.6, "every": 3, "text": "덩굴이 조여 온다!" },
+      "resist": {
+        "nature": "resist",
+        "fire": "weak",
+        "ice": "weak"
+      },
+      "special": {
+        "name": "덩굴 휘감기",
+        "coef": 1.6,
+        "every": 3,
+        "text": "덩굴이 조여 온다!"
+      },
       "drops": [
-        { "item": "heal_candy", "chance": 0.5 },
-        { "item": "mana_jelly", "chance": 0.3 },
-        { "item": "rift_shard", "chance": 0.6 },
-        { "item": "rift_core", "chance": 0.1 }
+        {
+          "item": "heal_candy",
+          "chance": 0.5
+        },
+        {
+          "item": "mana_jelly",
+          "chance": 0.3
+        },
+        {
+          "item": "rift_shard",
+          "chance": 0.6
+        },
+        {
+          "item": "rift_core",
+          "chance": 0.1
+        },
+        {
+          "item": "vine_sickle",
+          "chance": 0.3,
+          "grades": [
+            "common",
+            "uncommon"
+          ]
+        },
+        {
+          "item": "leaf_cape",
+          "chance": 0.3,
+          "grades": [
+            "common",
+            "uncommon"
+          ]
+        },
+        {
+          "item": "thorn_wand",
+          "chance": 0.15,
+          "grades": [
+            "common",
+            "uncommon"
+          ]
+        },
+        {
+          "item": "green_core_brooch",
+          "chance": 0.08,
+          "grades": [
+            "common",
+            "uncommon"
+          ]
+        }
       ]
     }
   ]

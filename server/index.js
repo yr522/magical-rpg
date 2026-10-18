@@ -91,8 +91,11 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
   };
   const zoneEvents = (zoneId) => game.eventList.filter((e) => e.zone === zoneId).map((e) => eventView(e, zoneId));
 
-  // 화면에 보낼 구역 정보 (고정 맵 + 지금 열린 토벌 이벤트).
-  const zoneInfo = (zoneId) => ({ ...game.zoneView(zoneId), events: zoneEvents(zoneId) });
+  // 화면에 보낼 구역 정보 (고정 맵 + 지금 열린 토벌 이벤트 + 상점).
+  const zoneInfo = (zoneId) => {
+    const shop = game.shopInZone(zoneId);
+    return { ...game.zoneView(zoneId), events: zoneEvents(zoneId), shop: shop && { id: shop.id, name: shop.name } };
+  };
 
   const saveCharacter = (row) => store.updateCharacter(row.id, row);
 
@@ -144,9 +147,9 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
         row.mp = p.mp;
         row.gold += gold;
         const levels = game.gainExp(row, exp);
-        const drops = def.drops.filter((d) => rng() < d.chance).map((d) => d.item);
+        const drops = game.rollDrops(def.drops, rng);
         await store.addItems(row.id, drops);
-        Object.assign(outcome, { exp, gold, levelUp: levels, items: drops.map((code) => game.items.get(code).name) });
+        Object.assign(outcome, { exp, gold, levelUp: levels, items: drops.map((d) => game.itemView(d)) });
       } else {
         // 전멸: 보유 골드 10% 손실, 본부로 귀환 (본부에서 HP/MP 회복).
         const lost = Math.floor(row.gold * DEATH_GOLD_PENALTY);
@@ -185,6 +188,64 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
     const { maxHp, maxMp } = game.combatStats(row);
     row.hp = maxHp;
     row.mp = maxMp;
+  }
+
+  // ---------- 장비 · 인벤토리 ----------
+
+  async function loadEquipment(row) {
+    row.equipment = (await store.listItemRows(row.id)).filter((it) => it.equipped);
+  }
+
+  // 기본 장비 지급. 3단계 이전에 만든 캐릭터도 처음 접속할 때 한 번 받는다.
+  async function grantStarterEquipment(row) {
+    if (row.starter_equipment) return;
+    const starter = game.characterData.startEquipment.map((code) => ({
+      code, grade: 'common', options: {}, slot: game.items.get(code).slot, equipped: true,
+    }));
+    // 이미 같은 칸에 낀 장비가 있으면 그 칸은 가방에만 넣는다.
+    const taken = new Set((await store.listItemRows(row.id)).filter((it) => it.equipped).map((it) => it.slot));
+    for (const it of starter) if (taken.has(it.slot)) it.equipped = false;
+    await store.addItems(row.id, starter);
+    row.starter_equipment = true;
+    await store.updateCharacter(row.id, { starter_equipment: true });
+  }
+
+  // HP/MP가 장비를 빼서 줄어든 최대치를 넘지 않게.
+  function clampVitals(row) {
+    const { maxHp, maxMp } = game.combatStats(row);
+    row.hp = Math.min(row.hp, maxHp);
+    row.mp = Math.min(row.mp, maxMp);
+  }
+
+  // 같은 캐릭터의 아이템·골드 처리는 하나씩 차례로 (빠르게 두 번 눌러도 복사되지 않게).
+  function withLock(entry, fn) {
+    const run = (entry.lock || Promise.resolve()).then(fn);
+    entry.lock = run.catch(() => {});
+    return run;
+  }
+
+  async function inventoryView(entry) {
+    const shop = game.shopInZone(entry.row.location_id);
+    const rows = (await store.listItemRows(entry.row.id)).filter((it) => game.items.has(it.code));
+    const equipment = rows.filter((it) => game.items.get(it.code).kind === 'equipment').map((it) => game.itemView(it, shop));
+    const stacks = new Map();
+    for (const it of rows.filter((r) => game.items.get(r.code).kind !== 'equipment')) {
+      if (!stacks.has(it.code)) stacks.set(it.code, { ...game.itemView(it, shop), id: undefined, count: 0 });
+      stacks.get(it.code).count += 1;
+    }
+    return {
+      character: game.characterView(entry.row),
+      equipment,
+      stacks: [...stacks.values()],
+      shop: shop && { id: shop.id, name: shop.name },
+    };
+  }
+
+  // 인벤토리 명령에서 고른 아이템 한 줄을 찾는다. id(장비) 또는 code(쌓이는 아이템).
+  async function findOwnedItem(entry, { id, code }) {
+    const rows = await store.listItemRows(entry.row.id);
+    if (id !== undefined) return rows.find((it) => it.id === Number(id)) || null;
+    return rows.find((it) => it.code === code && !it.equipped) || null;
   }
 
   function leaveBattle(entry, reason) {
@@ -348,6 +409,10 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
       const row = await store.createCharacter(socket.data.userId, result.character);
       if (!row) return reply({ error: '이미 있는 캐릭터 이름입니다.' });
       await store.addItems(row.id, game.characterData.startItems);
+      await grantStarterEquipment(row);
+      await loadEquipment(row);
+      restoreFull(row); // 기본 장비 스탯까지 포함한 최대 HP/MP로 시작
+      await saveCharacter(row);
       reply({ ok: true, character: game.characterView(row) });
     });
 
@@ -372,6 +437,10 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
         // map.json에서 구역이 지워졌으면 시작 지점으로 돌려보낸다.
         row.location_id = game.characterData.startLocation;
         await store.updateLocation(row.id, row.location_id);
+      }
+      if (!online.has(row.id)) {
+        await grantStarterEquipment(row);
+        await loadEquipment(row);
       }
       reply({ ok: true });
       enterWorld(socket, row);
@@ -479,14 +548,120 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
     on('inventory:list', async (_payload, reply) => {
       const entry = currentEntry(socket);
       if (!entry) return reply({ error: '캐릭터를 먼저 골라 주세요.' });
-      const owned = await store.listItems(entry.row.id);
+      reply({ ok: true, ...(await inventoryView(entry)) });
+    });
+
+    // 인벤토리·상점 명령 공통: 게임 중이고 전투 중이 아닐 때, 한 번에 하나씩 처리.
+    const itemCommand = (event, handler) => on(event, async (payload, reply) => {
+      const entry = currentEntry(socket);
+      if (!entry) return reply({ error: '캐릭터를 먼저 골라 주세요.' });
+      if (entry.battleId) return reply({ error: '전투 중에는 할 수 없습니다.' });
+      const result = await withLock(entry, () => handler(entry, payload));
+      if (result.error) return reply(result);
+      reply({ ok: true, message: result.message, ...(await inventoryView(entry)) });
+    });
+
+    itemCommand('inventory:equip', async (entry, { id }) => {
+      const item = await findOwnedItem(entry, { id });
+      if (!item || game.items.get(item.code)?.kind !== 'equipment') return { error: '장착할 수 없는 아이템입니다.' };
+      if (item.equipped) return { error: '이미 장착 중입니다.' };
+      if (!(await store.setEquipped(entry.row.id, item.id, true))) return { error: '장착하지 못했습니다.' };
+      await loadEquipment(entry.row);
+      clampVitals(entry.row);
+      await saveCharacter(entry.row);
+      return { message: `${game.items.get(item.code).name}을(를) 장착했다.` };
+    });
+
+    itemCommand('inventory:unequip', async (entry, { id }) => {
+      const item = await findOwnedItem(entry, { id });
+      if (!item || !item.equipped) return { error: '장착 중인 장비가 아닙니다.' };
+      await store.setEquipped(entry.row.id, item.id, false);
+      await loadEquipment(entry.row);
+      clampVitals(entry.row);
+      await saveCharacter(entry.row);
+      return { message: `${game.items.get(item.code).name}을(를) 벗었다.` };
+    });
+
+    itemCommand('inventory:use', async (entry, { code }) => {
+      const def = game.items.get(code);
+      if (!def || def.kind !== 'consumable') return { error: '사용할 수 없는 아이템입니다.' };
+      const item = await findOwnedItem(entry, { code });
+      if (!item) return { error: '그 아이템이 없습니다.' };
+      const { maxHp, maxMp } = game.combatStats(entry.row);
+      if (entry.row.hp >= maxHp && entry.row.mp >= maxMp) return { error: '이미 HP와 MP가 가득 차 있습니다.' };
+      if (!(await store.applyChange(entry.row.id, { removeIds: [item.id] }))) return { error: '사용하지 못했습니다.' };
+      entry.row.hp = Math.min(maxHp, entry.row.hp + (def.use.hp || 0));
+      entry.row.mp = Math.min(maxMp, entry.row.mp + (def.use.mp || 0));
+      await saveCharacter(entry.row);
+      return { message: `${def.name}을(를) 사용했다.` };
+    });
+
+    itemCommand('inventory:discard', async (entry, { id, code }) => {
+      const item = await findOwnedItem(entry, { id, code });
+      if (!item) return { error: '그 아이템이 없습니다.' };
+      if (item.equipped) return { error: '장착 중인 장비는 먼저 벗어야 합니다.' };
+      if (!(await store.applyChange(entry.row.id, { removeIds: [item.id] }))) return { error: '버리지 못했습니다.' };
+      return { message: `${game.items.get(item.code).name}을(를) 버렸다.` };
+    });
+
+    itemCommand('inventory:disassemble', async (entry, { id }) => {
+      const item = await findOwnedItem(entry, { id });
+      if (!item || game.items.get(item.code)?.kind !== 'equipment') return { error: '장비만 분해할 수 있습니다.' };
+      if (item.equipped) return { error: '장착 중인 장비는 먼저 벗어야 합니다.' };
+      const shards = game.disassembleShards(item);
+      const ok = await store.applyChange(entry.row.id, { removeIds: [item.id], add: Array(shards).fill('rift_shard') });
+      if (!ok) return { error: '분해하지 못했습니다.' };
+      return { message: `${game.items.get(item.code).name}을(를) 분해해 균열 파편 ${shards}개를 얻었다.` };
+    });
+
+    on('shop:view', async (_payload, reply) => {
+      const entry = currentEntry(socket);
+      if (!entry) return reply({ error: '캐릭터를 먼저 골라 주세요.' });
+      const shop = game.shopInZone(entry.row.location_id);
+      if (!shop) return reply({ error: '여기에는 상점이 없습니다.' });
       reply({
         ok: true,
-        items: owned.filter((i) => game.items.has(i.code)).map((i) => {
-          const item = game.items.get(i.code);
-          return { id: item.id, name: item.name, kind: item.kind, desc: item.desc, count: i.count };
-        }),
+        name: shop.name,
+        goods: shop.sells.map((code) => ({
+          ...game.itemView({ code, grade: 'common', options: {} }),
+          price: game.buyPrice(shop, code),
+        })),
+        ...(await inventoryView(entry)),
       });
+    });
+
+    itemCommand('shop:buy', async (entry, { code, count = 1 }) => {
+      const shop = game.shopInZone(entry.row.location_id);
+      if (!shop) return { error: '여기에는 상점이 없습니다.' };
+      if (!shop.sells.includes(code)) return { error: '이 상점에서 팔지 않는 물건입니다.' };
+      const n = Number(count);
+      if (!Number.isInteger(n) || n < 1 || n > 20) return { error: '한 번에 1~20개까지 살 수 있습니다.' };
+      const cost = game.buyPrice(shop, code) * n;
+      if (entry.row.gold < cost) return { error: `골드가 부족합니다. (${cost} G 필요)` };
+      const def = game.items.get(code);
+      const add = Array.from({ length: n }, () => (def.kind === 'equipment' ? { code, grade: 'common', options: {}, slot: def.slot } : code));
+      // 메모리의 골드를 먼저 바꿔 두고, 저장에 실패하면 되돌린다.
+      entry.row.gold -= cost;
+      if (!(await store.applyChange(entry.row.id, { gold: entry.row.gold, add }))) {
+        entry.row.gold += cost;
+        return { error: '구매하지 못했습니다.' };
+      }
+      return { message: `${def.name} ${n}개를 ${cost} G에 샀다.` };
+    });
+
+    itemCommand('shop:sell', async (entry, { id, code }) => {
+      const shop = game.shopInZone(entry.row.location_id);
+      if (!shop) return { error: '여기에는 상점이 없습니다.' };
+      const item = await findOwnedItem(entry, { id, code });
+      if (!item) return { error: '그 아이템이 없습니다.' };
+      if (item.equipped) return { error: '장착 중인 장비는 먼저 벗어야 합니다.' };
+      const price = game.sellPrice(shop, item);
+      entry.row.gold += price;
+      if (!(await store.applyChange(entry.row.id, { gold: entry.row.gold, removeIds: [item.id] }))) {
+        entry.row.gold -= price;
+        return { error: '판매하지 못했습니다.' };
+      }
+      return { message: `${game.items.get(item.code).name}을(를) ${price} G에 팔았다.` };
     });
 
     on('map:view', async (_payload, reply) => {
