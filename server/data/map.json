@@ -1,0 +1,94 @@
+{
+  "regions": [
+    { "id": "hq", "name": "본부", "safe": true, "level": "-", "element": "-" },
+    { "id": "park", "name": "공원 균열", "safe": false, "level": "1~10", "element": "자연" }
+  ],
+  "zones": [
+    {
+      "id": "hq_plaza", "region": "hq", "name": "본부 광장",
+      "desc": "계약자들이 모이는 본부의 중심. 꺼지지 않는 등불이 광장을 둘러싸고 있다.",
+      "look": "벽에는 균열로 잃은 거리들의 이름이 새겨져 있다. 누군가 그 앞에 시든 꽃을 두고 갔다.",
+      "exits": [
+        { "label": "북쪽 · 복구의 여신 신전", "to": "hq_temple" },
+        { "label": "동쪽 · 상점", "to": "hq_shop" },
+        { "label": "서쪽 · 퀘스트 게시판", "to": "hq_board" },
+        { "label": "남쪽 성문 · 공원 균열", "to": "park_gate" }
+      ]
+    },
+    {
+      "id": "hq_temple", "region": "hq", "name": "복구의 여신 신전",
+      "desc": "희미한 빛이 고인 신전. 여신상은 눈을 감은 채 무언가를 기다리고 있다.",
+      "look": "제단 위의 그릇에는 서버 전체가 모은 원력이 담긴다고 한다. 지금은 비어 있다.",
+      "exits": [ { "label": "남쪽 · 본부 광장", "to": "hq_plaza" } ]
+    },
+    {
+      "id": "hq_shop", "region": "hq", "name": "상점",
+      "desc": "선반에 회복 사탕과 마나 젤리가 늘어선 작은 가게. 주인은 말이 없다.",
+      "look": "계산대 옆에 '외상 사절. 돌아오지 못한 손님이 너무 많아서.'라는 쪽지가 붙어 있다.",
+      "exits": [ { "label": "서쪽 · 본부 광장", "to": "hq_plaza" } ]
+    },
+    {
+      "id": "hq_board", "region": "hq", "name": "퀘스트 게시판",
+      "desc": "의뢰서가 빼곡히 꽂힌 게시판. 몇 장은 빛이 바래 글씨를 알아볼 수 없다.",
+      "look": "가장 오래된 의뢰서에는 '실종된 동생을 찾아 주세요'라고 적혀 있다.",
+      "exits": [ { "label": "동쪽 · 본부 광장", "to": "hq_plaza" } ]
+    },
+    {
+      "id": "park_gate", "region": "park", "name": "공원 입구",
+      "desc": "녹슨 철문 너머로 비틀린 나무들이 보인다. 공원 균열의 중심지다.",
+      "look": "철문에 걸린 안내판은 반쯤 뜯겨 '어린이 놀이터 →'라는 글자만 남았다.",
+      "exits": [
+        { "label": "북쪽 성문 · 본부 광장", "to": "hq_plaza" },
+        { "label": "동쪽 · 산책로", "to": "park_trail" },
+        { "label": "남쪽 · 분수 광장", "to": "park_fountain" }
+      ]
+    },
+    {
+      "id": "park_trail", "region": "park", "name": "산책로",
+      "desc": "가로등이 하나 걸러 하나씩 꺼져 있는 길. 발밑의 흙이 이상하게 따뜻하다.",
+      "look": "벤치에 누군가의 운동화 한 짝이 놓여 있다. 주인은 보이지 않는다.",
+      "exits": [
+        { "label": "서쪽 · 공원 입구", "to": "park_gate" },
+        { "label": "남쪽 · 숲길", "to": "park_forest" }
+      ]
+    },
+    {
+      "id": "park_fountain", "region": "park", "name": "분수 광장",
+      "desc": "말라붙은 분수 바닥에 덩굴이 뿌리를 내렸다. 덩굴은 아주 천천히 움직인다.",
+      "look": "분수 바닥에 던져진 동전들 사이로, 아직 소원을 기다리는 것 같은 빛이 깜빡인다.",
+      "exits": [
+        { "label": "북쪽 · 공원 입구", "to": "park_gate" },
+        { "label": "동쪽 · 숲길", "to": "park_forest" },
+        { "label": "남쪽 · 호숫가", "to": "park_lake" }
+      ]
+    },
+    {
+      "id": "park_forest", "region": "park", "name": "숲길",
+      "desc": "나무들이 서로 엉켜 하늘을 가린다. 잎사귀 사이로 무언가가 숨을 쉰다.",
+      "look": "나무껍질에 아이들이 새긴 이름들이 있다. 몇몇 이름 위로 새 가지가 자라 덮였다.",
+      "exits": [
+        { "label": "북쪽 · 산책로", "to": "park_trail" },
+        { "label": "서쪽 · 분수 광장", "to": "park_fountain" },
+        { "label": "남쪽 · 균열의 중심", "to": "park_core" }
+      ]
+    },
+    {
+      "id": "park_lake", "region": "park", "name": "호숫가",
+      "desc": "검게 고인 호수. 수면에 비친 하늘은 실제 하늘과 색이 다르다.",
+      "look": "물가에 오리배가 뒤집혀 있다. 그 아래에서 무언가 반짝인다.",
+      "exits": [
+        { "label": "북쪽 · 분수 광장", "to": "park_fountain" },
+        { "label": "동쪽 · 균열의 중심", "to": "park_core" }
+      ]
+    },
+    {
+      "id": "park_core", "region": "park", "name": "균열의 중심",
+      "desc": "공기가 찢어진 자리. 초록빛 틈새에서 낮은 웅웅거림이 새어 나온다.",
+      "look": "틈새 너머는 보이지 않는다. 오래 바라보면 누군가 이쪽을 마주 보는 기분이 든다.",
+      "exits": [
+        { "label": "북쪽 · 숲길", "to": "park_forest" },
+        { "label": "서쪽 · 호숫가", "to": "park_lake" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+# Render 무료 Web Service 설정. Render 대시보드의 "New → Blueprint"에서 이 저장소를 고르면 자동으로 읽는다.
+services:
+  - type: web
+    name: magical-rpg
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false # Supabase 연결 주소를 대시보드에서 직접 넣는다
