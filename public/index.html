@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>균열의 계약자</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="connection" class="connection hidden">서버에 연결하는 중… (서버가 잠들어 있었다면 1분 정도 걸릴 수 있어요)</div>
+
+  <!-- 로그인 / 회원가입 -->
+  <section id="screen-auth" class="screen hidden">
+    <div class="card narrow">
+      <h1>균열의 계약자</h1>
+      <p class="muted">도시에 균열이 열렸다. 계약을 맺고, 세계를 지켜라.</p>
+      <form id="auth-form" autocomplete="on">
+        <label>닉네임 <input name="nickname" maxlength="12" autocomplete="username" required></label>
+        <label>비밀번호 <input name="password" type="password" maxlength="64" autocomplete="current-password" required></label>
+        <p id="auth-error" class="error"></p>
+        <div class="row">
+          <button type="submit" data-mode="login">로그인</button>
+          <button type="submit" data-mode="register" class="secondary">회원가입</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- 캐릭터 선택 -->
+  <section id="screen-select" class="screen hidden">
+    <div class="card">
+      <div class="row spread">
+        <h2>캐릭터 선택</h2>
+        <span class="muted"><span id="select-nickname"></span> · <button class="link" id="logout-from-select">로그아웃</button></span>
+      </div>
+      <ul id="character-list" class="character-list"></ul>
+      <p id="select-error" class="error"></p>
+      <button id="go-create">+ 새로 만들기</button>
+    </div>
+  </section>
+
+  <!-- 캐릭터 생성 -->
+  <section id="screen-create" class="screen hidden">
+    <div class="card">
+      <h2>계약</h2>
+      <form id="create-form">
+        <label>이름 <input name="name" maxlength="12" placeholder="2~12자" required></label>
+        <fieldset><legend>성별</legend><div class="choices" data-field="gender"></div></fieldset>
+        <fieldset><legend>속성</legend><div class="choices" data-field="element"></div></fieldset>
+        <fieldset><legend>클래스</legend><div class="choices" data-field="classId"></div><p id="class-desc" class="muted"></p></fieldset>
+        <fieldset><legend>계약 신</legend><div class="choices" data-field="godId"></div></fieldset>
+        <div class="preview">
+          <h3>스탯 미리보기</h3>
+          <table id="stat-preview"></table>
+        </div>
+        <p id="create-error" class="error"></p>
+        <div class="row">
+          <button type="submit">계약한다</button>
+          <button type="button" class="secondary" id="cancel-create">돌아가기</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- 필드 -->
+  <section id="screen-game" class="screen hidden">
+    <header class="statusbar" id="statusbar"></header>
+    <main class="field">
+      <div class="field-main">
+        <div id="field-log" class="log"></div>
+        <div id="actions" class="actions"></div>
+      </div>
+      <aside class="field-side">
+        <h3>이곳의 계약자</h3>
+        <ul id="players" class="players"></ul>
+        <h3>채팅</h3>
+        <ul id="chat-log" class="chat-log"></ul>
+        <form id="chat-form" class="chat-form">
+          <select name="channel" aria-label="채널">
+            <option value="zone">지역</option>
+            <option value="global">전체</option>
+          </select>
+          <input name="text" maxlength="200" placeholder="메시지 입력" autocomplete="off">
+          <button type="submit">전송</button>
+        </form>
+      </aside>
+    </main>
+    <nav class="bottom-menu">
+      <button data-menu="character">캐릭터</button>
+      <button data-menu="map">지도</button>
+      <button data-menu="switch">캐릭터 변경</button>
+      <button data-menu="logout">로그아웃</button>
+    </nav>
+  </section>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="card modal-body">
+      <div id="modal-content"></div>
+      <button id="modal-close" class="secondary">닫기</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
