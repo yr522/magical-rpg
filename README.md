@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | 회원가입 초대 코드 | 가입할 때 초대 코드가 꼭 필요하다. 코드 하나로 계정 하나만 만들 수 있다 (대소문자 상관없음, `XXXX-XXXX` 8글자) | `server/index.js`의 `auth:register` |
 | 관리자 계정 | 닉네임이 `admin`인 계정 (대소문자 상관없음). 이 닉네임은 Render의 `ADMIN_CODE` 값을 초대 코드 칸에 적어야만 가입된다 | Render 환경 변수 `ADMIN_NICKNAME`, `ADMIN_CODE` |
-| 관리자 모드 | 관리자 계정으로 로그인한 뒤 **Ctrl+Q**로 열고 닫는다. 지금은 초대 코드 만들기 · 목록 · 사용 여부만 있다 | `public/app.js`의 `openAdmin` |
+| 관리자 모드 | 관리자 계정으로 로그인한 뒤 **Ctrl+`**(Ctrl + 숫자 1 왼쪽 키)로 열고 닫는다. 브라우저·윈도우 단축키와 겹치지 않는 키로 골랐다. 지금은 초대 코드 만들기 · 목록 · 사용 여부만 있다 | `public/app.js`의 `openAdmin` |
 | 공격력 / 마법 공격력 / 방어력 | STR×2+레벨 / MAG×2+레벨 / VIT×1.5+레벨 | `server/game.js`의 `combatStats` |
 | 필요 경험치 | 50 × 현재 레벨 | `server/data/character.json`의 `growth` |
 | HP 회복 | 본부에 들어가면 전체 회복 | `server/index.js`의 `move` |

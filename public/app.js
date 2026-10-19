@@ -1622,7 +1622,7 @@
     }));
   }
 
-  // ---------- 관리자 모드 (관리자 계정에서 Ctrl+Q) ----------
+  // ---------- 관리자 모드 (관리자 계정에서 Ctrl+` — 브라우저·윈도우 단축키와 안 겹치는 키) ----------
   // 지금은 초대 코드 관리만: 만들기(한 번 누르면 1개), 목록, 사용 여부(가입한 계정)
   async function openAdmin(made) {
     const res = await request('admin:codes');
@@ -1657,11 +1657,11 @@
           c.usedAt ? el('span') : el('button', { type: 'button', class: 'pbtn small', text: '복사', onclick: copy(c.code) }),
         ])) : [el('p', { class: 'muted', text: '아직 만든 초대 코드가 없어요.' })]),
       ]),
-      el('p', { class: 'muted foot-note', text: '초대 코드 하나로 계정 하나만 만들 수 있어요. 한 사람에게 하나씩 나눠 주세요. (Ctrl+Q로 닫기)' }),
+      el('p', { class: 'muted foot-note', text: '초대 코드 하나로 계정 하나만 만들 수 있어요. 한 사람에게 하나씩 나눠 주세요. (Ctrl+`로 닫기)' }),
     ]), 'pop-admin');
   }
   document.addEventListener('keydown', (e) => {
-    if (!(e.ctrlKey && (e.key === 'q' || e.key === 'Q'))) return;
+    if (!(e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'Backquote')) return;
     if (!state.isAdmin) return;
     e.preventDefault();
     if (!$('modal').classList.contains('hidden') && $('modal-panel').classList.contains('pop-admin')) return closeModal();
