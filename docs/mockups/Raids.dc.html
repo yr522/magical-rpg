@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>토벌 목록 창 시안</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&amp;family=Noto+Sans+KR:wght@300;400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font-family:inherit}
+button:focus-visible{outline:2px solid #b48cff;outline-offset:2px}
+</style>
+</helmet>
+<!-- 필드 화면 위에 뜨는 팝업 (뒤는 어둡게) -->
+<div style="width: 1440px; height: 890px; box-sizing: border-box; position: relative; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans KR', system-ui, sans-serif; font-size: 14px; line-height: 1.5; background: radial-gradient(ellipse at 50% 30%, #2a3b33 0%, #12161a 70%); color: {{t.text}}">
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(5,4,10,0.6)"></div>
+
+  <div style="position: relative; z-index: 1; filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5))">
+    <button type="button" aria-label="토벌 목록 닫기" style="position: absolute; right: 12px; top: 10px; z-index: 2; width: 18px; height: 18px; padding: 0; border: none; background: transparent; color: #ffffff; font-size: 13px; line-height: 1; cursor: pointer">×</button>
+    <section role="dialog" aria-label="토벌 목록" style="width: 728px; height: 480px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 22px 26px 20px 30px; background: linear-gradient(135deg, {{t.panel}} 0%, {{t.bg}} 100%)">
+      <header style="display: flex; flex-direction: column; gap: 8px; padding-right: 26px">
+        <div style="display: flex; align-items: baseline; justify-content: space-between">
+          <h1 style="margin: 0; font-family: 'Gowun Batang', serif; font-size: 22px; font-weight: 700">토벌 목록</h1>
+          <span style="font-size: 13px; color: {{t.muted}}">진행 중 {{count}}건</span>
+        </div>
+        <div aria-hidden="true" style="display: flex; align-items: center; gap: 12px; color: {{t.accent}}">
+          <span style="flex: 1; height: 2px; background: {{t.accent}}"></span>
+          <span style="font-size: 14px; line-height: 1">✦</span>
+          <span style="flex: 1; height: 2px; background: {{t.accent}}"></span>
+        </div>
+      </header>
+
+      <!-- 2줄씩 아래로 계속 이어지고, 넘치면 스크롤 -->
+      <ul aria-label="토벌 이벤트" style="flex: 1; min-height: 0; overflow-y: auto; margin: 0; padding: 0 8px 0 0; list-style: none; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 84px; gap: 10px">
+        <sc-for list="{{raids}}" as="r" hint-placeholder-count="6">
+          <li style="{{r.cardStyle}}">
+            <div style="display: flex; flex-direction: column; min-width: 0">
+              <div style="display: flex; align-items: center; gap: 6px; min-width: 0">
+                <b style="font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.name}}</b>
+                <span style="flex: none; font-size: 12px; color: {{t.muted}}">Lv.{{r.level}}</span>
+                <span style="{{r.gradeStyle}}">{{r.grade}}</span>
+              </div>
+              <span style="font-size: 12px; color: {{t.muted}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.where}}</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+              <span style="font-size: 12px; color: {{r.timeColor}}">{{r.time}}</span>
+              <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: {{t.muted}}">
+                <span aria-hidden="true" style="display: flex; gap: 3px">
+                  <sc-for list="{{r.seats}}" as="seat" hint-placeholder-count="4">
+                    <span style="{{seat}}"></span>
+                  </sc-for>
+                </span>
+                참가 {{r.joined}} / 4
+              </span>
+            </div>
+          </li>
+        </sc-for>
+      </ul>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":890}}'>
+// 등급 색 (임시)
+const GRADE = { 약함: '#7fd49a', 보통: '#6fa8ff', 강함: '#ffaa55', 위험: '#ff6b7a' };
+const HERE = '공원 균열 - 균열의 중심'; // 시안: 지금 내가 있는 곳
+
+const RAIDS = [
+  { name: '덩굴 포식자', level: 3, grade: '약함', where: '공원 균열 - 균열의 중심', time: '무기한', joined: 1 },
+  { name: '그림자 박쥐 떼', level: 5, grade: '보통', where: '폐교 균열 - 음악실', time: '남은 시간 42:10', joined: 3 },
+  { name: '녹슨 수호상', level: 7, grade: '강함', where: '구시가지 균열 - 시계탑', time: '남은 시간 1:15:00', joined: 0 },
+  { name: '거울 속 소녀', level: 9, grade: '위험', where: '백화점 균열 - 7층 거울방', time: '남은 시간 08:47', joined: 4 },
+  { name: '얼어붙은 분수 정령', level: 4, grade: '보통', where: '공원 균열 - 분수 광장', time: '남은 시간 25:30', joined: 2 },
+  { name: '종이학 군단', level: 2, grade: '약함', where: '폐교 균열 - 옥상', time: '무기한', joined: 0 },
+  { name: '번개 먹는 고양이', level: 6, grade: '강함', where: '구시가지 균열 - 변전소', time: '남은 시간 55:02', joined: 1 },
+];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { dark: true };
+  }
+
+  theme() {
+    return this.state.dark
+      ? { bg: '#0f0e15', panel: '#1a1823', panel2: '#23202f', line: '#34304a', text: '#e7e3f2', muted: '#a49eba', accent: '#b48cff', accentText: '#160f24', title: '#f2c97a' }
+      : { bg: '#f3f0f8', panel: '#ffffff', panel2: '#ece8f4', line: '#d4cde4', text: '#1d1a28', muted: '#5c5570', accent: '#6b3fd1', accentText: '#ffffff', title: '#9a5b00' };
+  }
+
+  renderVals() {
+    const t = this.theme();
+    const raids = RAIDS.map((r) => {
+      const here = r.where === HERE; // 지금 내가 있는 곳이면 왼쪽에 보라 선
+      return {
+        ...r,
+        cardStyle: `box-sizing: border-box; padding: 12px 14px; display: flex; flex-direction: column; justify-content: space-between; border-radius: 10px; background: ${t.panel2}; ${here ? `box-shadow: inset 3px 0 0 ${t.accent};` : ''}`,
+        gradeStyle: `flex: none; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700; color: #160f24; background: ${GRADE[r.grade]}`,
+        timeColor: r.time === '무기한' ? t.muted : t.title,
+        seats: [0, 1, 2, 3].map((i) => `width: 8px; height: 8px; border-radius: 50%; ${i < r.joined ? `background: ${t.accent}` : `border: 1px solid ${t.line}; box-sizing: border-box`}`),
+      };
+    });
+    return { t, raids, count: RAIDS.length };
+  }
+}
+</script>
+</body>
+</html>

@@ -65,7 +65,7 @@ button:focus-visible{outline:2px solid #b48cff;outline-offset:2px}
             </sc-for>
           </div>
         </div>
-        <p style="margin: 0; display: flex; justify-content: space-between; font-size: 12px; color: {{t.muted}}"><span>{{used}} / 50칸</span><span>보유 골드 <b style="color: {{t.title}}; font-size: 14px">232 G</b></span></p>
+        <p style="margin: 0; display: flex; justify-content: space-between; font-size: 12px; color: {{t.muted}}"><span>{{used}} / 100칸</span><span>보유 골드 <b style="color: {{t.title}}; font-size: 14px">232 G</b></span></p>
       </div>
     </section>
   </div>
@@ -105,7 +105,7 @@ class Component extends DCLogic {
     const btn = `height: 30px; padding: 0 12px; border-radius: 8px; font-size: 13px; cursor: pointer; border: 1px solid ${t.line}; background: ${t.panel2}; color: ${t.text}`;
     const main = `${btn}; border: none; background: ${t.accent}; color: ${t.accentText}; font-weight: 700`;
 
-    const cells = Array.from({ length: 50 }, (_, i) => BAG[i] || null).map((it, i) => {
+    const cells = Array.from({ length: 100 }, (_, i) => BAG[i] || null).map((it, i) => {
       if (!it) return { empty: true, on: 'false', label: '빈 칸', icon: '', count: '', pick: () => {}, style: `position: relative; border-radius: 8px; border: 1px dashed ${t.line}; background: transparent; cursor: default` };
       const on = s.sel === i;
       const border = it.grade ? GRADE[it.grade] : t.line;

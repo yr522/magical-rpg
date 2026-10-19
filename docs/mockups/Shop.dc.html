@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>상점 창 시안</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&amp;family=Noto+Sans+KR:wght@300;400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font-family:inherit}
+button:focus-visible{outline:2px solid #b48cff;outline-offset:2px}
+</style>
+</helmet>
+<!-- 필드 화면 위에 뜨는 팝업 (뒤는 어둡게) -->
+<div style="width: 1440px; height: 890px; box-sizing: border-box; position: relative; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans KR', system-ui, sans-serif; font-size: 15px; line-height: 1.55; background: radial-gradient(ellipse at 50% 30%, #2a3b33 0%, #12161a 70%); color: {{t.text}}">
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(5,4,10,0.6)"></div>
+
+  <div style="position: relative; z-index: 1; filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5))">
+    <button type="button" aria-label="상점 닫기" style="position: absolute; right: 12px; top: 10px; z-index: 2; width: 18px; height: 18px; padding: 0; border: none; background: transparent; color: #ffffff; font-size: 13px; line-height: 1; cursor: pointer">×</button>
+    <section role="dialog" aria-label="본부 상점" style="width: 960px; height: 460px; box-sizing: border-box; display: flex; gap: 28px; padding: 22px 26px 20px; background: linear-gradient(135deg, {{t.panel}} 0%, {{t.bg}} 100%)">
+
+      <!-- 왼쪽: 내 가방 -->
+      <div style="flex: 0 0 280px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 10px; color: {{t.accent}}">
+          <h2 style="margin: 0; flex: none; font-size: 14px; font-weight: 700; color: {{t.text}}">내 가방</h2>
+          <span aria-hidden="true" style="flex: 1; height: 2px; background: {{t.accent}}"></span>
+        </div>
+        <div role="listbox" aria-label="내 가방" style="flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px 2px 2px">
+          <div style="display: grid; grid-template-columns: repeat(5, 46px); grid-auto-rows: 46px; gap: 6px">
+            <sc-for list="{{bagCells}}" as="c" hint-placeholder-count="30">
+              <button type="button" role="option" aria-selected="{{c.on}}" aria-label="{{c.label}}" disabled="{{c.empty}}" onClick="{{c.pick}}" style="{{c.style}}">
+                <span aria-hidden="true" style="font-size: 22px; line-height: 1">{{c.icon}}</span>
+                <span aria-hidden="true" style="position: absolute; right: 3px; bottom: 0; font-size: 11px; font-weight: 700; text-shadow: 0 1px 2px #000">{{c.count}}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+        <p style="margin: 0; display: flex; justify-content: space-between; font-size: 12px; color: {{t.muted}}"><span>{{used}} / 100칸</span><span>보유 골드 <b style="color: {{t.title}}; font-size: 14px">{{gold}} G</b></span></p>
+      </div>
+
+      <!-- 가운데: 고른 아이템 설명 + 사기 / 팔기 -->
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; text-align: center">
+        <sc-if value="{{hasSel}}" hint-placeholder-val="{{true}}">
+          <div role="img" aria-label="{{sel.name}} 그림" style="{{sel.bigStyle}}">{{sel.icon}}</div>
+          <div>
+            <p style="margin: 0; font-family: 'Gowun Batang', serif; font-size: 20px; font-weight: 700; line-height: 1.3">{{sel.name}}</p>
+            <p style="margin: 2px 0 0; font-size: 13px; color: {{sel.gradeColor}}">{{sel.sub}}</p>
+          </div>
+          <p style="margin: 0; max-width: 280px; white-space: pre-line; font-size: 13px; line-height: 1.6">{{sel.desc}}</p>
+          <dl style="margin: 2px 0 0; display: grid; grid-template-columns: auto auto; column-gap: 12px; row-gap: 2px; font-size: 13px; text-align: left">
+            <dt style="color: {{t.muted}}">습득처</dt><dd style="margin: 0">{{sel.from}}</dd>
+            <dt style="color: {{t.muted}}">{{sel.priceLabel}}</dt><dd style="margin: 0">{{sel.priceText}}</dd>
+          </dl>
+          <!-- 개수 (여러 개 겹치는 아이템만) -->
+          <sc-if value="{{sel.stack}}" hint-placeholder-val="{{true}}">
+            <div role="group" aria-label="개수" style="display: flex; align-items: center; gap: 6px; font-size: 13px">
+              <button type="button" onClick="{{dec}}" aria-label="하나 줄이기" style="{{stepBtn}}">−</button>
+              <b style="min-width: 28px">{{qty}}개</b>
+              <button type="button" onClick="{{inc}}" aria-label="하나 늘리기" style="{{stepBtn}}">+</button>
+            </div>
+          </sc-if>
+          <button type="button" onClick="{{deal}}" disabled="{{dealDisabled}}" style="{{dealStyle}}">{{dealLabel}}</button>
+        </sc-if>
+        <sc-if value="{{noSel}}" hint-placeholder-val="{{false}}">
+          <p style="margin: 0; color: {{t.muted}}">아이템을 누르면 여기에 설명이 나와요.</p>
+        </sc-if>
+      </div>
+
+      <!-- 오른쪽: 상점 물건 -->
+      <div style="flex: 0 0 280px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 10px; margin-right: 26px; color: {{t.accent}}">
+          <span aria-hidden="true" style="flex: 1; height: 2px; background: {{t.accent}}"></span>
+          <h2 style="margin: 0; flex: none; font-family: 'Gowun Batang', serif; font-size: 17px; font-weight: 700; color: {{t.text}}">본부 상점</h2>
+        </div>
+        <div role="listbox" aria-label="상점 물건" style="flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px 2px 2px">
+          <div style="display: grid; grid-template-columns: repeat(5, 46px); grid-auto-rows: 46px; gap: 6px">
+            <sc-for list="{{shopCells}}" as="c" hint-placeholder-count="9">
+              <button type="button" role="option" aria-selected="{{c.on}}" aria-label="{{c.label}}" onClick="{{c.pick}}" style="{{c.style}}">
+                <span aria-hidden="true" style="font-size: 22px; line-height: 1">{{c.icon}}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+        <p style="margin: 0; font-size: 12px; color: {{t.muted}}">상점은 일반 등급 장비만 팔아요.</p>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":890}}'>
+// 희귀도 색 (items.json의 grades.color와 같음)
+const GRADE = { 일반: '#c9c5d6', 고급: '#6fd39b', 희귀: '#6fa8ff', 영웅: '#c08bff', 전설: '#ffaa55', 신화: '#ff6b7a' };
+// 본부 상점 (shops.json): 살 때 기준가 ×1.0, 팔 때 ×0.4
+const BUY_RATE = 1.0;
+const SELL_RATE = 0.4;
+
+const ITEMS = {
+  candy: { name: '회복 사탕', icon: '🍬', kind: '소모품', stack: true, desc: 'HP를 60 회복한다.', from: '본부 상점, 덩굴 포식자', price: 20 },
+  jelly: { name: '마나 젤리', icon: '🍮', kind: '소모품', stack: true, desc: 'MP를 30 회복한다.', from: '본부 상점', price: 25 },
+  shard: { name: '균열 파편', icon: '💎', kind: '재료', stack: true, desc: '날카로운 초록빛 조각. 장비를 분해하면 나온다.', from: '장비 분해', price: 5 },
+  core: { name: '몬스터 핵', icon: '🟢', kind: '재료', stack: true, desc: '아직 미약하게 맥동한다.', from: '덩굴 포식자', price: 30 },
+  sickle: { name: '덩굴 낫', icon: '🪓', kind: '장비 · 무기', grade: '고급', desc: '덩굴 포식자의 팔이 굳어 만들어진 낫.\n힘 +4 · 민첩 +1 · 추가 옵션: 행운 +1', from: '덩굴 포식자', price: 200 },
+  cape: { name: '잎사귀 망토', icon: '🧥', kind: '장비 · 의상', grade: '일반', desc: '마른 잎이 겹겹이 엮인 망토. 바스락거린다.\n체력 +3', from: '덩굴 포식자', price: 150 },
+  star: { name: '별가루 지팡이', icon: '🪄', kind: '장비 · 무기', grade: '일반', desc: '끝에서 별가루가 떨어진다.\n마력 +2 · 행운 +1', from: '본부 상점', price: 120 },
+  baton: { name: '강철 지휘봉', icon: '🦯', kind: '장비 · 무기', grade: '일반', desc: '마법봉이라기엔 너무 무겁다.\n힘 +3', from: '본부 상점', price: 120 },
+  dress: { name: '프릴 계약복', icon: '👗', kind: '장비 · 의상', grade: '일반', desc: '보기보다 질기다.\n체력 +2 · 민첩 +1', from: '본부 상점', price: 140 },
+  bell: { name: '바람 방울', icon: '🔔', kind: '장비 · 장신구', grade: '일반', desc: '흔들면 바람 소리가 난다.\n민첩 +2', from: '본부 상점', price: 100 },
+  wand: { name: '견습 마법봉', icon: '✨', kind: '장비 · 무기', grade: '일반', desc: '계약 첫날 받는 마법봉.\n힘 +1 · 마력 +1', from: '본부 상점, 처음 시작할 때', price: 30 },
+  ribbon: { name: '견습 리본', icon: '🎀', kind: '장비 · 의상', grade: '일반', desc: '변신하면 저절로 묶이는 리본.\n체력 +1', from: '본부 상점, 처음 시작할 때', price: 25 },
+  brooch: { name: '견습 브로치', icon: '💠', kind: '장비 · 장신구', grade: '일반', desc: '계약 신의 문장이 희미하게 새겨진 브로치.\n행운 +1', from: '본부 상점, 처음 시작할 때', price: 25 },
+};
+const SHOP = ['candy', 'jelly', 'star', 'baton', 'dress', 'bell', 'wand', 'ribbon', 'brooch'];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      dark: true,
+      gold: 232,
+      bag: [['candy', 3], ['jelly', 2], ['shard', 12], ['core', 1], ['sickle', 1], ['cape', 1]],
+      sel: { side: 'shop', key: 'candy' },
+      qty: 1,
+    };
+  }
+
+  theme() {
+    return this.state.dark
+      ? { bg: '#0f0e15', panel: '#1a1823', panel2: '#23202f', line: '#34304a', text: '#e7e3f2', muted: '#a49eba', accent: '#b48cff', accentText: '#160f24', title: '#f2c97a' }
+      : { bg: '#f3f0f8', panel: '#ffffff', panel2: '#ece8f4', line: '#d4cde4', text: '#1d1a28', muted: '#5c5570', accent: '#6b3fd1', accentText: '#ffffff', title: '#9a5b00' };
+  }
+
+  renderVals() {
+    const t = this.theme();
+    const s = this.state;
+    const btn = `height: 32px; padding: 0 22px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; border: none; background: ${t.accent}; color: ${t.accentText}`;
+    const off = `height: 32px; padding: 0 22px; border-radius: 8px; font-size: 14px; border: 1px solid ${t.line}; background: transparent; color: ${t.muted}; cursor: default`;
+    const cell = (it, on) => `position: relative; display: grid; place-items: center; padding: 0; border-radius: 8px; cursor: pointer; color: ${t.text}; background: ${t.panel2}; border: 2px solid ${it.grade ? GRADE[it.grade] : t.line}; box-shadow: ${on ? `0 0 0 2px ${t.accent}` : 'none'}`;
+    const pick = (side, key) => () => this.setState({ sel: { side, key }, qty: 1 });
+
+    const bagCells = Array.from({ length: 100 }, (_, i) => s.bag[i] || null).map((b) => {
+      if (!b) return { empty: true, on: 'false', label: '빈 칸', icon: '', count: '', pick: () => {}, style: `position: relative; border-radius: 8px; border: 1px dashed ${t.line}; background: transparent; cursor: default` };
+      const [key, n] = b;
+      const it = ITEMS[key];
+      const on = s.sel.side === 'bag' && s.sel.key === key;
+      return { empty: false, on: String(on), icon: it.icon, count: n > 1 ? n : '', label: `${it.name} ${n}개`, pick: pick('bag', key), style: cell(it, on) };
+    });
+    const shopCells = SHOP.map((key) => {
+      const it = ITEMS[key];
+      const on = s.sel.side === 'shop' && s.sel.key === key;
+      return { on: String(on), icon: it.icon, label: `${it.name} ${Math.round(it.price * BUY_RATE)} G`, pick: pick('shop', key), style: cell(it, on) };
+    });
+
+    const it = ITEMS[s.sel.key];
+    const buying = s.sel.side === 'shop';
+    const owned = (s.bag.find(([k]) => k === s.sel.key) || [])[1] || 0;
+    const unit = buying ? Math.round(it.price * BUY_RATE) : Math.floor(it.price * SELL_RATE);
+    const qty = it.stack ? s.qty : 1;
+    const total = unit * qty;
+    const maxQty = buying ? 99 : owned;
+    const cantAfford = buying && total > s.gold;
+
+    const sel = {
+      ...it,
+      stack: Boolean(it.stack),
+      sub: it.grade ? `${it.grade} · ${it.kind}` : it.kind,
+      gradeColor: it.grade ? GRADE[it.grade] : t.muted,
+      priceLabel: buying ? '구매가' : '판매가',
+      priceText: `${unit} G${buying ? '' : ` (가지고 있는 수 ${owned}개)`}`,
+      bigStyle: `width: 96px; height: 96px; display: grid; place-items: center; font-size: 52px; border-radius: 12px; background: ${t.panel2}; border: 3px solid ${it.grade ? GRADE[it.grade] : t.line}`,
+    };
+
+    return {
+      t, bagCells, shopCells, sel,
+      gold: s.gold,
+      used: s.bag.length,
+      hasSel: true, noSel: false,
+      qty,
+      stepBtn: `width: 26px; height: 26px; padding: 0; border-radius: 13px; border: 1px solid ${t.line}; background: ${t.panel2}; color: ${t.text}; font-size: 15px; line-height: 1; cursor: pointer`,
+      dec: () => this.setState({ qty: Math.max(1, s.qty - 1) }),
+      inc: () => this.setState({ qty: Math.min(maxQty, s.qty + 1) }),
+      dealLabel: `${buying ? '구매' : '판매'} · ${total} G`,
+      dealDisabled: cantAfford,
+      dealStyle: cantAfford ? off : btn,
+      deal: () => {
+        if (cantAfford) return;
+        const bag = s.bag.map(([k, n]) => [k, n]);
+        const row = bag.find(([k]) => k === s.sel.key);
+        if (buying) {
+          if (row && it.stack) row[1] += qty; else bag.push([s.sel.key, qty]);
+          this.setState({ bag, gold: s.gold - total, qty: 1 });
+        } else {
+          row[1] -= qty;
+          const left = bag.filter(([, n]) => n > 0);
+          const still = row[1] > 0;
+          this.setState({ bag: left, gold: s.gold + total, qty: 1, sel: still ? s.sel : { side: 'shop', key: 'candy' } });
+        }
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>
