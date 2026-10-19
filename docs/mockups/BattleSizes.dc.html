@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>전투 전경 인원별 비교</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 2920px; height: 1360px; box-sizing: border-box; padding: 40px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; background: #0f0e15; color: #e7e3f2; font-family: 'Noto Sans KR', system-ui, sans-serif">
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <p style="margin: 0; font-size: 20px; font-weight: 700">1명 <a href="Battle.dc.html" style="margin-left: 12px; font-size: 15px; color: #b48cff">← 전투 화면으로</a></p>
+    <dc-import name="BattleScene" count="{{one}}" bubbles="{{solo}}" hint-size="100%,560px"></dc-import>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <p style="margin: 0; font-size: 20px; font-weight: 700">2명</p>
+    <dc-import name="BattleScene" count="{{two}}" hint-size="100%,560px"></dc-import>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <p style="margin: 0; font-size: 20px; font-weight: 700">3명</p>
+    <dc-import name="BattleScene" count="{{three}}" hint-size="100%,560px"></dc-import>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <p style="margin: 0; font-size: 20px; font-weight: 700">4명</p>
+    <dc-import name="BattleScene" count="{{four}}" hint-size="100%,560px"></dc-import>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":2920,"height":1360}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { one: 1, two: 2, three: 3, four: 4, solo: { 1: '혼자서도 해낼 수 있어.' } };
+  }
+}
+</script>
+</body>
+</html>

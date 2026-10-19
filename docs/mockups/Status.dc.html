@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>스테이터스 창 시안</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&amp;family=Noto+Sans+KR:wght@300;400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font-family:inherit}
+button:focus-visible{outline:2px solid #b48cff;outline-offset:2px}
+</style>
+</helmet>
+<!-- 필드 화면 위에 뜨는 세로로 긴 팝업 (뒤는 어둡게) -->
+<div style="width: 1440px; height: 890px; box-sizing: border-box; position: relative; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans KR', system-ui, sans-serif; font-size: 14px; line-height: 1.5; background: radial-gradient(ellipse at 50% 30%, #2a3b33 0%, #12161a 70%); color: {{t.text}}">
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(5,4,10,0.6)"></div>
+
+  <div style="position: relative; z-index: 1; filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5))">
+    <button type="button" aria-label="스테이터스 닫기" style="position: absolute; right: 12px; top: 10px; z-index: 2; width: 18px; height: 18px; padding: 0; border: none; background: transparent; color: #ffffff; font-size: 13px; line-height: 1; cursor: pointer">×</button>
+    <section role="dialog" aria-label="스테이터스" style="width: 330px; height: 660px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 22px 20px 18px; background: linear-gradient(160deg, {{t.panel}} 0%, {{t.bg}} 100%)">
+
+      <!-- 머리: 이름 · Lv · 경험치 -->
+      <header style="display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; padding-right: 34px">
+          <h1 style="margin: 0; font-family: 'Gowun Batang', serif; font-size: 24px; font-weight: 700">스테이터스</h1>
+          <span style="font-size: 15px; font-weight: 700">세라 <span style="color: {{t.muted}}; font-weight: 400">Lv.3</span></span>
+        </div>
+        <div aria-hidden="true" style="display: flex; align-items: center; gap: 12px; color: {{t.accent}}">
+          <span style="flex: 1; height: 2px; background: {{t.accent}}"></span>
+          <span style="font-size: 14px; line-height: 1">✦</span>
+          <span style="flex: 1; height: 2px; background: {{t.accent}}"></span>
+        </div>
+      </header>
+
+      <!-- 스탯 5개 -->
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <sc-for list="{{stats}}" as="st" hint-placeholder-count="5">
+          <div style="display: flex; align-items: center; gap: 8px; height: 36px">
+            <span style="flex: 0 0 74px"><b style="font-weight: 700">{{st.name}}</b> <span style="font-size: 11px; color: {{t.muted}}">{{st.code}}</span></span>
+            <span aria-hidden="true" style="flex: 1; height: 6px; background: {{t.panel2}}"><span style="{{st.fill}}"></span></span>
+            <span style="flex: 0 0 66px; text-align: right"><b style="font-size: 17px">{{st.value}}</b> <span style="font-size: 11px; color: {{t.muted}}">{{st.bonus}}</span></span>
+            <span style="flex: 0 0 28px; display: grid; place-items: center">
+              <sc-if value="{{canAdd}}" hint-placeholder-val="{{true}}">
+                <button type="button" onClick="{{st.add}}" aria-label="{{st.name}} 1 올리기" style="width: 28px; height: 28px; padding: 0; border-radius: 14px; border: none; background: {{t.accent}}; color: {{t.accentText}}; font-size: 18px; font-weight: 700; line-height: 1; cursor: pointer">+</button>
+              </sc-if>
+            </span>
+          </div>
+        </sc-for>
+        <p style="margin: 2px 0 0; display: flex; justify-content: space-between; font-size: 13px; color: {{t.muted}}"><span><br></span>
+          <span>남은 포인트 <b style="color: {{pointColor}}; font-size: 15px">{{points}}</b></span>
+        </p>
+      </div>
+
+      <!-- 특성 (길면 이 안에서 스크롤) -->
+      <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid {{t.line}}">
+        <h2 style="margin: 0; font-size: 14px; font-weight: 700; color: {{t.muted}}">특성</h2>
+        <div style="flex: 1; min-height: 0; overflow-y: auto; padding-right: 6px; display: flex; flex-direction: column; gap: 14px">
+          <dl style="margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+            <sc-for list="{{traits}}" as="tr" hint-placeholder-count="4">
+              <div style="padding: 8px 10px; border-radius: 8px; background: {{t.panel2}}">
+                <dt style="font-size: 11px; color: {{t.muted}}">{{tr.k}}</dt>
+                <dd style="margin: 0; font-size: 14px; font-weight: 500">{{tr.v}}</dd>
+              </div>
+            </sc-for>
+          </dl>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <h3 style="margin: 0; font-size: 13px; font-weight: 700; color: {{t.muted}}">스킬</h3>
+            <sc-for list="{{skills}}" as="sk" hint-placeholder-count="2">
+              <div style="{{sk.style}}">
+                <div style="display: flex; justify-content: space-between; gap: 8px"><b style="font-weight: 700">{{sk.name}}</b><span style="font-size: 12px; color: {{t.muted}}">{{sk.cost}}</span></div>
+                <span style="font-size: 12px; color: {{t.muted}}">{{sk.desc}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":890}}'>
+const STATS = [
+  ['str', '힘', 'STR', 1],
+  ['mag', '마력', 'MAG', 1],
+  ['vit', '체력', 'VIT', 0],
+  ['agi', '민첩', 'AGI', 0],
+  ['luk', '행운', 'LUK', 1],
+];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { dark: true, base: { str: 6, mag: 11, vit: 7, agi: 6, luk: 6 }, points: 3 };
+  }
+
+  theme() {
+    return this.state.dark
+      ? { bg: '#0f0e15', panel: '#1a1823', panel2: '#23202f', line: '#34304a', text: '#e7e3f2', muted: '#a49eba', accent: '#b48cff', accentText: '#160f24', title: '#f2c97a' }
+      : { bg: '#f3f0f8', panel: '#ffffff', panel2: '#ece8f4', line: '#d4cde4', text: '#1d1a28', muted: '#5c5570', accent: '#6b3fd1', accentText: '#ffffff', title: '#9a5b00' };
+  }
+
+  renderVals() {
+    const t = this.theme();
+    const s = this.state;
+    const total = {};
+    const stats = STATS.map(([k, name, code, eq]) => {
+      total[k] = s.base[k] + eq;
+      return {
+        name, code, value: total[k], bonus: eq ? `(+${eq})` : '',
+        fill: `display: block; height: 100%; width: ${Math.min(100, total[k] * 3)}%; background: ${t.accent}`,
+        add: () => { if (s.points > 0) this.setState({ points: s.points - 1, base: { ...s.base, [k]: s.base[k] + 1 } }); },
+      };
+    });
+    const lv = 3;
+    const traits = [
+      ['속성', '✨ 빛'], ['클래스', '어태커'],
+      ['계약 신', '마력의 신\n'], ['경험치', '84 / 150'],
+      ['HP', `${80 + total.vit * 8}`], ['MP', `${30 + total.mag * 4}`],
+      ['공격력', `${total.str * 2 + lv}`], ['마법 공격력', `${total.mag * 2 + lv}`],
+      ['방어력', `${Math.round(total.vit * 1.5 + lv)}`], ['회피율', `${Math.min(30, total.agi * 0.5)}%`],
+      ['치명타율', `${Math.min(25, total.luk * 0.5)}%`],
+    ].map(([k, v]) => ({ k, v }));
+    const skill = (name, cost, desc, locked) => ({
+      name, cost, desc,
+      style: `padding: 8px 10px; border-radius: 8px; border: 1px ${locked ? 'dashed' : 'solid'} ${t.line}; ${locked ? 'opacity: 0.6' : `background: ${t.panel2}`}`,
+    });
+    return {
+      t, stats, traits,
+      points: s.points,
+      canAdd: s.points > 0,
+      pointColor: s.points > 0 ? t.title : t.muted,
+      skills: [
+        skill('별빛 일격', 'MP 8', '내 속성으로 강하게 내리친다.'),
+        skill('연속 베기', 'MP 10', '물리 공격 2회.'),
+        skill('???', 'Lv.5에 해금', '레벨을 올리면 새 스킬이 열려요.', true),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
