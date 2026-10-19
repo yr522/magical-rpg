@@ -271,7 +271,47 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
     return rows.find((it) => it.code === code && !it.equipped) || null;
   }
 
-  // 다른 사람에게도 보이는 OC 프로필 (관계는 친구 기능에서 채운다)
+  const rowOf = async (id) => online.get(id)?.row || (await store.getCharacter(id));
+
+  // 친구 · 관계가 바뀌면 상대 화면도 다시 그리게 알린다.
+  const notifyLinks = (charId) => online.get(charId)?.socket?.emit('links:changed');
+
+  // 친구 한 명: 접속 상태(접속 중 / 전투 중 / 오프라인)와 지금(또는 마지막) 위치
+  function presenceView(row) {
+    const entry = online.get(row.id);
+    const zone = game.zones.get(row.location_id);
+    const opt = (list, id) => (game.characterData[list].find((o) => o.id === id) || {}).name || id;
+    return {
+      id: row.id,
+      name: row.name,
+      level: row.level,
+      cls: opt('classes', row.class),
+      avatarUrl: row.avatar_url || null,
+      status: !entry ? 'offline' : entry.battleId ? 'battle' : 'online',
+      where: zone ? `${game.regions.get(zone.region).name} - ${zone.name}` : '알 수 없는 곳',
+    };
+  }
+
+  async function friendsView(charId) {
+    const links = await store.listLinks(charId);
+    const other = (l) => (l.fromId === charId ? l.toId : l.fromId);
+    const withRow = async (l) => {
+      const row = await rowOf(other(l));
+      return row && { linkId: l.id, ...presenceView(row), relation: l.name };
+    };
+    const pick = (fn) => Promise.all(links.filter(fn).map(withRow)).then((list) => list.filter(Boolean));
+    return {
+      friends: await pick((l) => l.kind === 'friend' && l.status === 'accepted'),
+      incoming: await pick((l) => l.kind === 'friend' && l.status === 'pending' && l.toId === charId),
+      sent: await pick((l) => l.kind === 'friend' && l.status === 'pending' && l.fromId === charId),
+      relations: (await pick((l) => l.kind === 'relation')).map((r) => {
+        const l = links.find((x) => x.id === r.linkId);
+        return { ...r, status: l.status, incoming: l.status === 'pending' && l.toId === charId };
+      }),
+    };
+  }
+
+  // 다른 사람에게도 보이는 OC 프로필
   function profileView(row, worn, viewerId) {
     const opt = (list, id) => (game.characterData[list].find((o) => o.id === id) || {}).name || id;
     return {
@@ -532,6 +572,81 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
       sendPlayers(to);
     });
 
+    // ---------- 친구 · 관계 ----------
+    const needEntry = (reply) => {
+      const entry = currentEntry(socket);
+      if (!entry) reply({ error: '캐릭터를 먼저 골라 주세요.' });
+      return entry;
+    };
+
+    on('friends:list', async (_payload, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      reply({ ok: true, ...(await friendsView(entry.row.id)) });
+    });
+
+    on('friends:request', async ({ name }, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      const target = await store.getCharacterByName(String(name || '').trim());
+      if (!target) return reply({ error: '그런 이름의 캐릭터가 없어요.' });
+      if (target.id === entry.row.id) return reply({ error: '나 자신은 친구로 추가할 수 없어요.' });
+      const links = await store.listLinks(entry.row.id);
+      const pair = links.filter((l) => l.kind === 'friend' && [l.fromId, l.toId].includes(target.id));
+      if (pair.some((l) => l.status === 'accepted')) return reply({ error: '이미 친구예요.' });
+      if (pair.some((l) => l.fromId === entry.row.id)) return reply({ error: '이미 친구 신청을 보냈어요.' });
+      const incoming = pair.find((l) => l.toId === entry.row.id);
+      // 상대가 먼저 신청했으면 바로 친구가 된다. 오프라인이어도 신청은 남는다.
+      if (incoming) await store.setLinkStatus(incoming.id, 'accepted');
+      else await store.addLink({ kind: 'friend', fromId: entry.row.id, toId: target.id });
+      notifyLinks(target.id);
+      reply({ ok: true, accepted: Boolean(incoming), ...(await friendsView(entry.row.id)) });
+    });
+
+    // 받은 신청(친구 · 관계) 수락 / 거절, 보낸 신청 취소, 성립한 것 해제 — 모두 링크 번호로.
+    on('links:answer', async ({ linkId, accept }, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      const link = (await store.listLinks(entry.row.id)).find((l) => l.id === Number(linkId));
+      if (!link || link.toId !== entry.row.id || link.status !== 'pending') return reply({ error: '받은 신청이 아닙니다.' });
+      if (accept) await store.setLinkStatus(link.id, 'accepted');
+      else await store.deleteLink(link.id);
+      notifyLinks(link.fromId);
+      reply({ ok: true, ...(await friendsView(entry.row.id)) });
+    });
+
+    on('links:remove', async ({ linkId }, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      const links = await store.listLinks(entry.row.id);
+      const link = links.find((l) => l.id === Number(linkId));
+      if (!link) return reply({ error: '없는 친구 · 관계입니다.' });
+      const other = link.fromId === entry.row.id ? link.toId : link.fromId;
+      await store.deleteLink(link.id);
+      // 친구를 끊으면 그 사람과의 관계도 같이 없어진다.
+      if (link.kind === 'friend') {
+        for (const l of links) if (l.kind === 'relation' && [l.fromId, l.toId].includes(other)) await store.deleteLink(l.id);
+      }
+      notifyLinks(other);
+      reply({ ok: true, ...(await friendsView(entry.row.id)) });
+    });
+
+    on('relation:request', async ({ id, name }, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      const relName = String(name || '').trim();
+      const max = game.profileRules.relationMax;
+      if (!relName || relName.length > max) return reply({ error: `관계 이름은 1~${max}자로 적어 주세요.` });
+      const other = Number(id);
+      const links = await store.listLinks(entry.row.id);
+      const isFriend = links.some((l) => l.kind === 'friend' && l.status === 'accepted' && [l.fromId, l.toId].includes(other));
+      if (!isFriend) return reply({ error: '친구 목록에 있는 사람에게만 관계를 신청할 수 있어요.' });
+      if (links.some((l) => l.kind === 'relation' && [l.fromId, l.toId].includes(other))) return reply({ error: '이미 그 사람과의 관계가 있거나 신청 중이에요.' });
+      await store.addLink({ kind: 'relation', fromId: entry.row.id, toId: other, name: relName });
+      notifyLinks(other);
+      reply({ ok: true, ...(await friendsView(entry.row.id)) });
+    });
+
     // ---------- OC 프로필 ----------
     on('profile:view', async ({ id }, reply) => {
       const entry = currentEntry(socket);
@@ -540,7 +655,17 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
       const row = online.get(targetId)?.row || (await store.getCharacter(targetId));
       if (!row) return reply({ error: '그런 캐릭터가 없습니다.' });
       const worn = (await store.listItemRows(row.id)).filter((it) => it.equipped && game.items.has(it.code));
-      reply({ ok: true, profile: profileView(row, worn, entry.row.id) });
+      const profile = profileView(row, worn, entry.row.id);
+      const links = await store.listLinks(row.id);
+      profile.relations = await Promise.all(links.filter((l) => l.kind === 'relation' && l.status === 'accepted').map(async (l) => {
+        const other = l.fromId === row.id ? l.toId : l.fromId;
+        return { id: other, name: (await rowOf(other))?.name || '?', relation: l.name };
+      }));
+      // 보는 사람과 이 캐릭터의 친구 상태: none / sent / incoming / friend
+      const f = links.find((l) => l.kind === 'friend' && [l.fromId, l.toId].includes(entry.row.id) && row.id !== entry.row.id);
+      profile.friend = !f ? 'none' : f.status === 'accepted' ? 'friend' : f.fromId === entry.row.id ? 'sent' : 'incoming';
+      profile.friendLinkId = f?.id || null;
+      reply({ ok: true, profile });
     });
 
     on('profile:checkName', async ({ name }, reply) => {

@@ -30,6 +30,9 @@ function countItems(codes) {
 // 새 아이템은 코드 문자열이나 { code, grade, options, slot, equipped } 둘 다 받는다.
 const normalizeItem = (x) => (typeof x === 'string' ? { code: x } : x);
 
+// 친구 · 관계 한 줄
+const linkRow = (r) => ({ id: Number(r.id), kind: r.kind, fromId: Number(r.from_id), toId: Number(r.to_id), name: r.name || null, status: r.status });
+
 // 아이템 한 줄을 화면/게임 코드에서 쓰는 모양으로.
 const itemRow = (r) => ({
   id: Number(r.id),
@@ -216,6 +219,28 @@ function createPostgresStore(connectionString) {
       );
       return rowCount > 0;
     },
+    // ---------- 친구 · 관계 (links) ----------
+    async getCharacterByName(name) {
+      const { rows } = await pool.query('SELECT * FROM characters WHERE lower(name) = lower($1)', [name]);
+      return withNumberIds(rows[0]);
+    },
+    async listLinks(charId) {
+      const { rows } = await pool.query('SELECT * FROM links WHERE from_id = $1 OR to_id = $1 ORDER BY id', [charId]);
+      return rows.map(linkRow);
+    },
+    async addLink({ kind, fromId, toId, name = null, status = 'pending' }) {
+      const { rows } = await pool.query(
+        'INSERT INTO links (kind, from_id, to_id, name, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [kind, fromId, toId, name, status],
+      );
+      return linkRow(rows[0]);
+    },
+    async setLinkStatus(id, status) {
+      await pool.query('UPDATE links SET status = $2 WHERE id = $1', [id, status]);
+    },
+    async deleteLink(id) {
+      await pool.query('DELETE FROM links WHERE id = $1', [id]);
+    },
     async close() {
       await pool.end();
     },
@@ -276,6 +301,7 @@ function createFileStore(filePath) {
       data.characters = data.characters.filter((c) => !(c.id === id && c.user_id === userId));
       if (data.characters.length === before) return false;
       data.items = data.items.filter((i) => i.owner_id !== id);
+      data.links = (data.links || []).filter((l) => l.from_id !== id && l.to_id !== id);
       save();
       return true;
     },
@@ -357,6 +383,29 @@ function createFileStore(filePath) {
       data.items.splice(index, 1);
       save();
       return true;
+    },
+    async getCharacterByName(name) {
+      return copy(data.characters.find((c) => lower(c.name) === lower(name)));
+    },
+    async listLinks(charId) {
+      return (data.links || []).filter((l) => l.from_id === charId || l.to_id === charId).map(linkRow);
+    },
+    async addLink({ kind, fromId, toId, name = null, status = 'pending' }) {
+      data.links = data.links || [];
+      data.nextLinkId = data.nextLinkId || 1;
+      const row = { id: data.nextLinkId++, kind, from_id: fromId, to_id: toId, name, status, created_at: new Date().toISOString() };
+      data.links.push(row);
+      save();
+      return linkRow(row);
+    },
+    async setLinkStatus(id, status) {
+      const row = (data.links || []).find((l) => l.id === id);
+      if (row) row.status = status;
+      save();
+    },
+    async deleteLink(id) {
+      data.links = (data.links || []).filter((l) => l.id !== id);
+      save();
     },
     async close() {},
   };

@@ -57,3 +57,17 @@ ALTER TABLE characters ADD COLUMN IF NOT EXISTS title TEXT;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS titles JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS cutin_url TEXT;
 ALTER TABLE characters ADD COLUMN IF NOT EXISTS custom_lines JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- 친구 · 관계. kind: friend(친구) / relation(관계, name에 관계 이름). status: pending(신청) / accepted(성립).
+-- from_id가 신청한 쪽, to_id가 받은 쪽.
+CREATE TABLE IF NOT EXISTS links (
+  id         BIGSERIAL PRIMARY KEY,
+  kind       TEXT NOT NULL,
+  from_id    BIGINT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  to_id      BIGINT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  name       TEXT,
+  status     TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS links_from_idx ON links (from_id);
+CREATE INDEX IF NOT EXISTS links_to_idx ON links (to_id);

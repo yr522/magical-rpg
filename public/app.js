@@ -756,7 +756,7 @@
       openProfile();
     },
     community() {
-      toast('파티 · 친구는 준비 중이에요.');
+      openFriends();
     },
     theme() {
       const light = document.body.classList.toggle('light');
@@ -1105,7 +1105,7 @@
   let profileSocialButtons = () => [];
 
   // 편집: 왼쪽 탭(기본 정보 · 사진 · OC 설정 · 관계 · 대사 프리셋), 아래 [취소] [저장]
-  function openProfileEdit(tab = 'basic') {
+  function openProfileEdit(tab = 'basic', relPreselect = null) {
     const c = state.character;
     const rules = state.options.profile;
     const d = {
@@ -1208,7 +1208,7 @@
         return [el('label', { class: 'plabel', text: 'OC 설정 — 외형, 성격, 과거, 소개 등 자유롭게' }), area, count];
       },
       rel() {
-        return profileRelationPanel ? profileRelationPanel() : [el('p', { class: 'phelp', text: '관계는 친구 기능과 함께 열려요.' })];
+        return profileRelationPanel(relPreselect);
       },
       lines() {
         return [
@@ -1256,7 +1256,7 @@
     ]), 'pop-pedit');
     draw();
   }
-  let profileRelationPanel = null;
+  let profileRelationPanel = () => [];
 
   // 사진을 브라우저에서 줄여(가운데를 잘라) JPEG 글자로 바꾼다. 서버에는 이 작은 그림만 간다.
   function resizeImage(file, w, h) {
@@ -1282,6 +1282,190 @@
       reader.readAsDataURL(file);
     });
   }
+
+  // ---------- 친구 창 ----------
+  // 파티 창과 같은 모양: 받은 신청(맨 위) · 친구 목록(접속 중 → 전투 중 → 오프라인), 우클릭 [프로필 보기] [친구 삭제], [+ 친구 추가]
+  const PRESENCE = { online: ['접속 중', '#7fd49a'], battle: ['전투 중', '#ff5c6c'], offline: ['오프라인', 'var(--muted)'] };
+  // 받침 있으면 a, 없으면 b (예: 릴리 + 와/과)
+  const josa = (word, a, b) => {
+    const code = word.charCodeAt(word.length - 1) - 0xac00;
+    return code >= 0 && code <= 11171 && code % 28 ? a : b;
+  };
+  function memberAvatar(p) {
+    const box = el('span', { class: `mava ${p.status === 'offline' ? 'off' : ''}`, 'aria-hidden': 'true' });
+    if (p.avatarUrl) box.append(el('img', { src: p.avatarUrl, alt: '' }));
+    else box.textContent = p.name.slice(0, 1);
+    return box;
+  }
+  function memberRow(p, { cls = '', menu = [], extra = [] } = {}) {
+    const [label, color] = PRESENCE[p.status] || PRESENCE.offline;
+    const row = el('li', { class: `mrow ${cls}`, title: menu.length ? '우클릭: 메뉴' : '' }, [
+      memberAvatar(p),
+      el('span', { class: 'minfo' }, [
+        el('b', { class: 'mname', text: p.name }),
+        ...(p.badge ? [p.badge] : []),
+        el('span', { class: 'msub', text: `Lv.${p.level} · ${p.cls} · 📍 ${p.where}` }),
+      ]),
+      ...extra,
+      p.status ? el('span', { class: 'mstate', style: `color:${color}`, text: `● ${label}` }) : null,
+    ]);
+    if (menu.length) {
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        openRowMenu(row, menu);
+      });
+    }
+    return row;
+  }
+  // 우클릭 메뉴: 다른 곳을 누르면 사라진다.
+  function openRowMenu(row, items) {
+    document.querySelectorAll('.row-menu').forEach((m) => m.remove());
+    const menu = el('div', { class: 'row-menu', role: 'menu' }, items.map(([label, fn, danger]) => el('button', {
+      type: 'button', role: 'menuitem', class: danger ? 'danger' : '', text: label, onclick: () => { menu.remove(); fn(); },
+    })));
+    row.append(menu);
+    const close = (e) => {
+      if (menu.contains(e.target)) return;
+      menu.remove();
+      document.removeEventListener('mousedown', close, true);
+    };
+    setTimeout(() => document.addEventListener('mousedown', close, true));
+  }
+  // 창 안에 뜨는 작은 이름 입력 팝업 (친구 추가 · 파티 초대)
+  function nameAsk(win, { label, placeholder, submit, button }) {
+    const msg = el('p', { class: 'ask-msg', role: 'status' });
+    const input = el('input', { placeholder, autocomplete: 'off', 'aria-label': label });
+    const box = el('div', { class: 'ask-wrap' }, [el('form', { class: 'ask', role: 'dialog', 'aria-label': label }, [
+      el('button', { type: 'button', class: 'popup-close', 'aria-label': '닫기', text: '×', onclick: () => box.remove() }),
+      el('label', { text: label }), input, msg,
+      el('button', { type: 'submit', class: 'pbtn main', text: button }),
+    ])]);
+    box.firstChild.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const error = await submit(input.value.trim());
+      if (error) msg.textContent = error;
+      else box.remove();
+    });
+    win.append(box);
+    input.focus();
+  }
+
+  const ORDER = { online: 0, battle: 1, offline: 2 };
+  async function openFriends() {
+    const res = await request('friends:list');
+    if (res.error) return toast(res.error);
+    renderFriends(res);
+  }
+  function renderFriends(f) {
+    const again = (res) => { if (res.error) return toast(res.error); renderFriends(res); };
+    const friends = [...f.friends].sort((a, b) => ORDER[a.status] - ORDER[b.status]);
+    const rows = [
+      ...f.incoming.map((q) => memberRow({ ...q, status: null }, {
+        cls: 'request',
+        extra: [
+          el('button', { type: 'button', class: 'pbtn main small', text: '수락', onclick: async () => again(await request('links:answer', { linkId: q.linkId, accept: true })) }),
+          el('button', { type: 'button', class: 'pbtn small', text: '거절', onclick: async () => again(await request('links:answer', { linkId: q.linkId, accept: false })) }),
+        ],
+      })),
+      ...friends.map((p) => memberRow(p, { menu: [
+        ['프로필 보기', () => openProfile(p.id)],
+        ['친구 삭제', async () => { if (confirm(`${p.name}을(를) 친구에서 삭제할까요? 둘 사이의 관계도 같이 없어져요.`)) again(await request('links:remove', { linkId: p.linkId })); }, true],
+      ] })),
+    ];
+    for (const r of rows.slice(0, f.incoming.length)) r.querySelector('.msub').textContent = '친구 신청을 보냈어요';
+    const online = friends.filter((p) => p.status !== 'offline').length;
+    const win = el('div', { class: 'list-win' }, [
+      el('header', {}, [el('div', { class: 'phead' }, [el('h2', { class: 'ptitle', text: '친구' }), el('span', { class: 'who', text: `접속 중 ${online} / ${friends.length}명` })]), ornament()]),
+      el('ul', { class: 'mlist', 'aria-label': '친구 목록' }, rows.length ? rows : [el('li', { class: 'muted empty-note', text: '아직 친구가 없어요. [+ 친구 추가]로 신청해 보세요.' })]),
+      el('footer', { class: 'list-foot' }, [
+        f.sent.length ? el('span', { class: 'muted', text: `보낸 신청: ${f.sent.map((s) => s.name).join(', ')}` }) : el('span'),
+        el('button', { type: 'button', class: 'pbtn small', text: '+ 친구 추가', onclick: () => nameAsk(win, {
+          label: '친구로 추가할 캐릭터 이름', placeholder: '예: 카논', button: '친구 신청 보내기',
+          submit: async (name) => {
+            if (!name) return '이름을 적어 주세요.';
+            const res = await request('friends:request', { name });
+            if (res.error) return res.error;
+            renderFriends(res);
+            return null;
+          },
+        }) }),
+      ]),
+    ]);
+    openModal(win, 'pop-list');
+  }
+  socket.on('links:changed', () => {
+    // 친구 창이 열려 있으면 새로 고친다.
+    if (!$('modal').classList.contains('hidden') && $('modal-panel').classList.contains('pop-list') && $('modal-content').querySelector('[aria-label="친구 목록"]')) openFriends();
+  });
+
+  // 다른 사람 프로필의 버튼: [친구 신청] (보냄 / 수락) · [관계 신청] (친구일 때만)
+  profileSocialButtons = (pf) => {
+    const reopen = () => openProfile(pf.id);
+    const friendBtn = {
+      none: actBtn('친구 신청', async () => { const r = await request('friends:request', { name: pf.name }); if (r.error) toast(r.error); reopen(); }, true),
+      sent: actBtn('친구 신청 보냄', () => {}),
+      incoming: actBtn('친구 수락', async () => { const r = await request('links:answer', { linkId: pf.friendLinkId, accept: true }); if (r.error) toast(r.error); reopen(); }, true),
+      friend: actBtn('친구', () => {}),
+    }[pf.friend || 'none'];
+    if (pf.friend === 'sent' || pf.friend === 'friend') friendBtn.disabled = true;
+    const rel = actBtn('관계 신청', () => openProfileEdit('rel', pf.id));
+    if (pf.friend !== 'friend') {
+      rel.disabled = true;
+      rel.title = '친구가 되어야 관계를 신청할 수 있어요';
+    }
+    return [friendBtn, rel];
+  };
+
+  // 프로필 편집의 [관계] 탭: 내 관계 목록 + 친구 목록에서 골라 신청
+  profileRelationPanel = (preselect) => {
+    const box = el('div', { class: 'rel-panel' }, [el('p', { class: 'phelp', text: '불러오는 중…' })]);
+    const me = state.character.name;
+    const sentence = (who, name) => `${me}${josa(me, '과', '와')} ${who}${josa(who, '은', '는')} ${name} 관계`;
+    const draw = (f) => {
+      const act = async (event, payload) => {
+        const res = await request(event, payload);
+        if (res.error) return toast(res.error);
+        draw(res);
+      };
+      const list = f.relations.map((r) => el('div', { class: 'rel-item' }, [
+        el('span', { class: 'rel-text', text: sentence(r.name, r.relation) }),
+        el('span', { class: `rel-badge ${r.status === 'accepted' ? 'on' : ''}`, text: r.status === 'accepted' ? '성립' : r.incoming ? '받은 신청' : '수락 기다리는 중' }),
+        r.incoming ? el('button', { type: 'button', class: 'pbtn main small', text: '수락', onclick: () => act('links:answer', { linkId: r.linkId, accept: true }) }) : null,
+        el('button', { type: 'button', class: 'pbtn small', text: r.status === 'accepted' ? '해제' : r.incoming ? '거절' : '신청 취소', onclick: () => (r.incoming ? act('links:answer', { linkId: r.linkId, accept: false }) : act('links:remove', { linkId: r.linkId })) }),
+      ]));
+      const related = new Set(f.relations.map((r) => r.id));
+      const candidates = f.friends.filter((p) => !related.has(p.id));
+      const pick = el('select', { 'aria-label': '친구 고르기' }, candidates.map((p) => el('option', { value: String(p.id), text: p.name })));
+      if (preselect && candidates.some((p) => p.id === preselect)) pick.value = String(preselect);
+      const relName = el('input', { placeholder: '관계 이름 (예: 소꿉친구, 라이벌)', maxlength: String(state.options.profile.relationMax), autocomplete: 'off', 'aria-label': '관계 이름' });
+      const preview = el('b');
+      const updatePreview = () => {
+        const who = candidates.find((p) => String(p.id) === pick.value);
+        preview.textContent = who ? sentence(who.name, relName.value.trim() || '○○') : '-';
+      };
+      pick.addEventListener('change', updatePreview);
+      relName.addEventListener('input', updatePreview);
+      updatePreview();
+      const form = el('form', { class: 'rel-form' }, [
+        el('h3', { text: '관계 신청하기' }),
+        candidates.length
+          ? el('div', { class: 'prow' }, [pick, relName, el('button', { type: 'submit', class: 'pbtn main', text: '신청' })])
+          : el('p', { class: 'phelp', text: '관계를 신청할 수 있는 친구가 없어요. 먼저 친구를 추가해 보세요.' }),
+        candidates.length ? el('p', { class: 'phelp' }, ['미리보기: ', preview]) : null,
+        el('p', { class: 'phelp', text: '친구 목록에서만 고를 수 있어요. 상대가 수락하면 두 사람 프로필에 모두에게 보여요. 해제는 어느 쪽이든 언제든 할 수 있어요.' }),
+      ]);
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        act('relation:request', { id: Number(pick.value), name: relName.value.trim() });
+      });
+      box.replaceChildren(
+        el('div', { class: 'rel-mine' }, [el('h3', { text: '내 관계' }), ...(list.length ? list : [el('p', { class: 'phelp', text: '아직 관계가 없어요.' })])]),
+        form,
+      );
+    };
+    request('friends:list').then((res) => (res.error ? toast(res.error) : draw(res)));
+    return [box];
+  };
 
   for (const btn of document.querySelectorAll('[data-menu]')) {
     btn.addEventListener('click', () => {

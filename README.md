@@ -60,6 +60,9 @@
 | 칭호 | 처음: [견습 계약자], 첫 토벌 승리: [첫 토벌의 증인] | `character.json`의 `profile.titles` |
 | 대사 프리셋 | 상황 7가지(전투 시작 · 공격 · 스킬 · 다침 · 회복받음 · 쓰러짐 · 승리), 상황마다 3개, 한 줄 40자. 스킬은 스킬마다 따로가 아니라 하나로 묶음 | `character.json`의 `profile` |
 | OC 설정 글 | 2000자까지 | `character.json`의 `profile.textMax` |
+| 친구 신청 | 상대가 오프라인이어도 신청은 남고, 접속하면 받은 신청에 보인다. 서로 신청하면 바로 친구 | `server/index.js`의 `friends:request` |
+| 친구 삭제 | 그 사람과의 관계도 같이 없어진다 | `server/index.js`의 `links:remove` |
+| 관계 이름 | 12자까지, 한 사람과 관계 하나 | `character.json`의 `profile.relationMax` |
 
 **덩굴 포식자 장비 드롭 확률 (한 번 잡을 때 각각 따로 굴림)**
 

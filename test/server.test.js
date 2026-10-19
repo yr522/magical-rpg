@@ -222,3 +222,41 @@ test('OC 프로필: 이름 중복 확인, 칭호 · 성별 · 설정 · 사진 �
   assert.strictEqual(view.profile.equipment.weapon.name, '견습 마법봉');
   assert.strictEqual(view.profile.mine, true);
 });
+
+test('친구: 신청 → 수락, 관계: 친구에게만 신청 → 수락하면 두 프로필에 보이고, 친구를 끊으면 관계도 사라진다', async () => {
+  const mk = async (nick, name) => {
+    const s = await client();
+    await s.call('auth:register', { nickname: nick, password: 'pass1234' });
+    const c = await s.call('char:create', { name, gender: 'girl', element: 'water', classId: 'supporter', godId: 'god_mag' });
+    await s.call('char:select', { id: c.character.id });
+    s.id = c.character.id;
+    return s;
+  };
+  const a = await mk('친구가', '친구에이');
+  const b = await mk('친구비', '친구비이');
+  assert.match((await a.call('friends:request', { name: '없는사람' })).error, /없어요/);
+  assert.match((await a.call('relation:request', { id: b.id, name: '라이벌' })).error, /친구 목록/);
+
+  const changed = new Promise((r) => b.once('links:changed', r));
+  assert.ok((await a.call('friends:request', { name: '친구비이' })).ok);
+  await changed;
+  let lb = await b.call('friends:list');
+  assert.strictEqual(lb.incoming[0].name, '친구에이');
+  lb = await b.call('links:answer', { linkId: lb.incoming[0].linkId, accept: true });
+  assert.strictEqual(lb.friends[0].name, '친구에이');
+  assert.strictEqual(lb.friends[0].status, 'online');
+
+  const r = await a.call('relation:request', { id: b.id, name: '소꿉친구' });
+  assert.ok(r.ok, r.error);
+  lb = await b.call('friends:list');
+  const rel = lb.relations[0];
+  assert.ok(rel.incoming);
+  await b.call('links:answer', { linkId: rel.linkId, accept: true });
+  const pa = (await b.call('profile:view', { id: a.id })).profile;
+  assert.deepStrictEqual(pa.relations, [{ id: b.id, name: '친구비이', relation: '소꿉친구' }]);
+  assert.strictEqual(pa.friend, 'friend');
+
+  const fa = await a.call('friends:list');
+  await a.call('links:remove', { linkId: fa.friends[0].linkId });
+  assert.deepStrictEqual((await a.call('profile:view', { id: a.id })).profile.relations, []);
+});

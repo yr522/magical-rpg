@@ -13,6 +13,7 @@
     "textMax": 2000,
     "linesPerSituation": 3,
     "lineMax": 40,
+    "relationMax": 12,
     "titles": [
       { "name": "견습 계약자", "when": "start" },
       { "name": "첫 토벌의 증인", "when": "firstVictory" }
