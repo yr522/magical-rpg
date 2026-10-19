@@ -181,7 +181,7 @@ test('공격 · 스킬 · 쿨다운 · 아이템 · 승리 보상 · 레벨업',
   await until(s, (x) => x.ended?.result === 'fled' && x.ended);
 });
 
-test('시간 초과면 자동 공격, 계속 방어만 하다 전멸하면 본부로 귀환 + 골드 10% 손실', async () => {
+test('(테스트용 제한시간을 정했을 때) 시간 초과면 자동 공격, 계속 방어만 하다 전멸하면 본부로 귀환 + 골드 10% 손실', async () => {
   const s = await player('attacker', 'god_str');
   await walkToRift(s);
   await s.call('raid:enter', { eventId: 'test_vine' });
@@ -335,5 +335,16 @@ test('민첩이 같아도 차례 순서는 라운드마다 바뀌지 않고, 몬
   battle.hitMonster(p, { atk: p.magAtk, coef: 1, element: 'fire', label: '공격' });
   assert.ok(hits.length === 1 && (hits[0].miss || (hits[0].amount > 0 && hits[0].element === 'fire')));
   clearTimeout(battle.timer);
+  battle.ended = true;
+});
+
+test('차례 제한시간이 없다: 기다려도 자동으로 넘어가지 않는다 (끊긴 사람이 빠지는 건 위 두 명 전투 테스트에서 확인)', async () => {
+  const { Battle } = require('../server/battle');
+  const hooks = { onLog() {}, onUpdate() {}, onLeave() {}, onEnd() {}, consumeItem: async () => true };
+  const battle = new Battle({ event: { id: 'no-limit', monster: 'vine_devourer' }, hooks, rng: () => 0.5, monsterDelayMs: 0 });
+  battle.join({ id: 1, name: '가', element: 'fire', class: 'attacker', level: 1, str: 5, agi: 99, vit: 5, mag: 5, luk: 5, hp: 999, mp: 99, equipment: [] }, []);
+  assert.strictEqual(battle.current.kind, 'player');
+  assert.strictEqual(battle.current.deadline, null);
+  assert.strictEqual(battle.timer, null);
   battle.ended = true;
 });
