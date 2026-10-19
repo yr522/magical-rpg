@@ -27,7 +27,7 @@ before(async () => {
   game.validateMap();
   store = createStore();
   await store.init();
-  server = createGameServer({ store, graceMs: 300, battleOptions: { rng: () => 0.5, turnMs: TURN_MS, monsterDelayMs: 0 } });
+  server = createGameServer({ requireInvite: false, store, graceMs: 300, battleOptions: { rng: () => 0.5, turnMs: TURN_MS, monsterDelayMs: 0 } });
   url = `http://localhost:${await server.listen(0)}`;
 });
 

@@ -71,3 +71,11 @@ CREATE TABLE IF NOT EXISTS links (
 );
 CREATE INDEX IF NOT EXISTS links_from_idx ON links (from_id);
 CREATE INDEX IF NOT EXISTS links_to_idx ON links (to_id);
+
+-- 초대 코드. 관리자가 만들고, 가입할 때 한 번만 쓸 수 있다 (한 사람당 한 계정).
+CREATE TABLE IF NOT EXISTS invite_codes (
+  code       TEXT PRIMARY KEY,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  used_by    BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  used_at    TIMESTAMPTZ
+);

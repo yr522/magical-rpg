@@ -24,7 +24,7 @@ before(async () => {
   game.validateMap();
   store = createStore();
   await store.init();
-  server = createGameServer({ store });
+  server = createGameServer({ requireInvite: false, store });
   url = `http://localhost:${await server.listen(0)}`;
 });
 

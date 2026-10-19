@@ -96,6 +96,7 @@
       return show('auth');
     }
     state.nickname = res.nickname;
+    state.isAdmin = Boolean(res.isAdmin);
     setToken(res.token);
     // 끊기기 전에 게임 중이었다면 같은 캐릭터로 바로 복귀한다 (30초 안이면 그 자리 그대로).
     if (state.activeCharacterId) {
@@ -126,16 +127,19 @@
     const res = await request(mode === 'register' ? 'auth:register' : 'auth:login', {
       nickname: form.get('nickname').trim(),
       password: form.get('password'),
+      invite: form.get('invite').trim(),
     });
     if (res.error) return ($('auth-error').textContent = res.error);
     $('auth-error').textContent = '';
     e.target.reset();
     state.nickname = res.nickname;
+    state.isAdmin = Boolean(res.isAdmin);
     setToken(res.token);
     openSelect();
   });
 
   async function logout() {
+    state.isAdmin = false;
     await request('auth:logout');
     setToken(null);
     setActiveCharacter(null);
@@ -1617,6 +1621,52 @@
       ]);
     }));
   }
+
+  // ---------- 관리자 모드 (관리자 계정에서 Ctrl+Q) ----------
+  // 지금은 초대 코드 관리만: 만들기(한 번 누르면 1개), 목록, 사용 여부(가입한 계정)
+  async function openAdmin(made) {
+    const res = await request('admin:codes');
+    if (res.error) return toast(res.error);
+    renderAdmin(res.codes, made);
+  }
+  function renderAdmin(codes, made) {
+    const date = (d) => (d ? new Date(d).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
+    const used = codes.filter((c) => c.usedAt).length;
+    const copy = (code) => async () => {
+      try { await navigator.clipboard.writeText(code); toast(`${code} 복사했어요.`); } catch { prompt('이 코드를 복사하세요', code); }
+    };
+    openModal(el('div', { class: 'admin-win' }, [
+      el('header', {}, [
+        el('div', { class: 'phead' }, [el('h2', { class: 'ptitle', text: '관리자 모드' }), el('span', { class: 'who', text: `초대 코드 ${codes.length}개 · 사용 ${used}개` })]),
+        ornament(),
+      ]),
+      el('div', { class: 'admin-top' }, [
+        actBtn('+ 초대 코드 만들기', async () => {
+          const r = await request('admin:createCode');
+          if (r.error) return toast(r.error);
+          renderAdmin(r.codes, r.code);
+        }, true),
+        made ? el('span', { class: 'admin-new' }, ['새 코드: ', el('b', { text: made }), ' ', el('button', { type: 'button', class: 'pbtn small', text: '복사', onclick: copy(made) })]) : null,
+      ]),
+      el('div', { class: 'admin-table' }, [
+        el('div', { class: 'arow head' }, [el('span', { text: '초대 코드' }), el('span', { text: '만든 때' }), el('span', { text: '사용' }), el('span')]),
+        ...(codes.length ? codes.map((c) => el('div', { class: `arow ${c.usedAt ? 'used' : ''} ${c.code === made ? 'fresh' : ''}` }, [
+          el('b', { class: 'acode', text: c.code }),
+          el('span', { text: date(c.createdAt) }),
+          el('span', { class: 'astate', text: c.usedAt ? `✔ ${c.usedBy || '(지운 계정)'} · ${date(c.usedAt)}` : '아직 안 씀' }),
+          c.usedAt ? el('span') : el('button', { type: 'button', class: 'pbtn small', text: '복사', onclick: copy(c.code) }),
+        ])) : [el('p', { class: 'muted', text: '아직 만든 초대 코드가 없어요.' })]),
+      ]),
+      el('p', { class: 'muted foot-note', text: '초대 코드 하나로 계정 하나만 만들 수 있어요. 한 사람에게 하나씩 나눠 주세요. (Ctrl+Q로 닫기)' }),
+    ]), 'pop-admin');
+  }
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey && (e.key === 'q' || e.key === 'Q'))) return;
+    if (!state.isAdmin) return;
+    e.preventDefault();
+    if (!$('modal').classList.contains('hidden') && $('modal-panel').classList.contains('pop-admin')) return closeModal();
+    openAdmin();
+  });
 
   for (const btn of document.querySelectorAll('[data-menu]')) {
     btn.addEventListener('click', () => {

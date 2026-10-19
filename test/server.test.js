@@ -25,7 +25,7 @@ before(async () => {
   game.validateMap();
   store = createStore();
   await store.init();
-  server = createGameServer({ store, graceMs: 300 });
+  server = createGameServer({ requireInvite: false, store, graceMs: 300 });
   const port = await server.listen(0);
   url = `http://localhost:${port}`;
 });
@@ -295,4 +295,43 @@ test('파티: 접속 중인 사람만 초대 → 수락, 파티장 위임 · 이
   assert.strictEqual((await a.call('party:view')).party, null);
   await b.call('party:leave');
   assert.strictEqual((await b.call('party:view')).party, null);
+});
+
+test('초대 코드: admin은 관리자 코드로만 가입, 관리자가 만든 코드는 한 번만 쓸 수 있다', async () => {
+  const strict = createGameServer({ store, requireInvite: true, adminCode: 'ADMIN-TEST' });
+  const strictUrl = `http://localhost:${await strict.listen(0)}`;
+  const open = () => new Promise((resolve) => {
+    const s = connect(strictUrl, { transports: ['websocket'], reconnection: false });
+    s.call = (event, payload = {}) => new Promise((r) => s.emit(event, payload, r));
+    s.on('connect', () => resolve(s));
+  });
+  const sockets = [];
+  try {
+    const admin = await open();
+    sockets.push(admin);
+    assert.match((await admin.call('auth:register', { nickname: 'admin', password: 'pass1234', invite: '틀림' })).error, /쓸 수 없/);
+    const reg = await admin.call('auth:register', { nickname: 'admin', password: 'pass1234', invite: 'ADMIN-TEST' });
+    assert.ok(reg.ok && reg.isAdmin, reg.error);
+    const made = await admin.call('admin:createCode');
+    assert.match(made.code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    assert.strictEqual(made.codes[0].usedBy, null);
+
+    const guest = await open();
+    sockets.push(guest);
+    assert.match((await guest.call('auth:register', { nickname: '손님일', password: 'pass1234' })).error, /초대 코드/);
+    assert.match((await guest.call('admin:codes')).error, /관리자만/);
+    const ok = await guest.call('auth:register', { nickname: '손님일', password: 'pass1234', invite: made.code.toLowerCase() });
+    assert.ok(ok.ok, ok.error);
+    assert.strictEqual(ok.isAdmin, false);
+
+    const again = await open();
+    sockets.push(again);
+    assert.match((await again.call('auth:register', { nickname: '손님이', password: 'pass1234', invite: made.code })).error, /이미 쓰인/);
+    const list = await admin.call('admin:codes');
+    assert.strictEqual(list.codes[0].usedBy, '손님일');
+    assert.ok(list.codes[0].usedAt);
+  } finally {
+    for (const s of sockets) s.close();
+    await strict.close();
+  }
 });

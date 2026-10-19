@@ -37,7 +37,9 @@ function clientVersion() {
 }
 
 // battleOptions: { rng, turnMs, monsterDelayMs } — 테스트에서 전투 속도와 난수를 고정할 때 쓴다.
-function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions = {} }) {
+// requireInvite: 가입할 때 초대 코드가 필요한지 (테스트에서는 끌 수 있다).
+// 관리자: 닉네임이 ADMIN_NICKNAME(기본 admin)인 계정. 이 닉네임은 ADMIN_CODE(Render 환경 변수)로만 가입할 수 있다.
+function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions = {}, requireInvite = true, adminNickname = process.env.ADMIN_NICKNAME || 'admin', adminCode = process.env.ADMIN_CODE }) {
   const rng = battleOptions.rng || Math.random;
   const app = express();
   app.get('/health', (_req, res) => res.send('ok'));
@@ -274,6 +276,20 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
     const rows = await store.listItemRows(entry.row.id);
     if (id !== undefined) return rows.find((it) => it.id === Number(id)) || null;
     return rows.find((it) => it.code === code && !it.equipped) || null;
+  }
+
+  // 초대 코드: 헷갈리는 글자(0 O 1 I L)를 뺀 8자리, 가운데 - (예: K7QM-2XPA)
+  const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  async function uniqueInviteCode() {
+    const taken = new Set((await store.listInviteCodes()).map((c) => c.code));
+    for (;;) {
+      const raw = Array.from(crypto.randomBytes(8), (b) => CODE_CHARS[b % CODE_CHARS.length]).join('');
+      const code = `${raw.slice(0, 4)}-${raw.slice(4)}`;
+      if (!taken.has(code)) {
+        await store.addInviteCode(code);
+        return code;
+      }
+    }
   }
 
   const rowOf = async (id) => online.get(id)?.row || (await store.getCharacter(id));
@@ -525,17 +541,47 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
       return Boolean(socket.data.userId);
     };
 
+    const isAdminName = (nickname) => String(nickname || '').toLowerCase() === adminNickname.toLowerCase();
     const loggedIn = (user, reply) => {
       socket.data.userId = user.id;
-      reply({ ok: true, token: auth.issueToken(user.id), nickname: user.nickname });
+      socket.data.isAdmin = isAdminName(user.nickname);
+      reply({ ok: true, token: auth.issueToken(user.id), nickname: user.nickname, isAdmin: socket.data.isAdmin });
     };
 
-    on('auth:register', async ({ nickname, password }, reply) => {
+    on('auth:register', async ({ nickname, password, invite }, reply) => {
       const problem = auth.checkCredentials(nickname, password);
       if (problem) return reply({ error: problem });
-      const user = await store.createUser(nickname, auth.hashPassword(password));
+      const code = String(invite || '').trim();
+      let user;
+      if (!requireInvite) {
+        user = await store.createUser(nickname, auth.hashPassword(password));
+      } else if (isAdminName(nickname)) {
+        // 관리자 닉네임은 관리자 코드로만
+        if (!adminCode || code !== adminCode) return reply({ error: '이 닉네임은 쓸 수 없습니다.' });
+        user = await store.createUser(nickname, auth.hashPassword(password));
+      } else {
+        if (!code) return reply({ error: '초대 코드를 적어 주세요.' });
+        const res = await store.createUserWithInvite(nickname, auth.hashPassword(password), code);
+        if (res.error === 'code') return reply({ error: '없거나 이미 쓰인 초대 코드입니다.' });
+        user = res.user;
+      }
       if (!user) return reply({ error: '이미 쓰고 있는 닉네임입니다.' });
       loggedIn(user, reply);
+    });
+
+    // ---------- 관리자 모드 (초대 코드) ----------
+    const requireAdmin = (reply) => {
+      if (!socket.data.isAdmin) reply({ error: '관리자만 할 수 있습니다.' });
+      return Boolean(socket.data.isAdmin);
+    };
+    on('admin:codes', async (_payload, reply) => {
+      if (!requireAdmin(reply)) return;
+      reply({ ok: true, codes: await store.listInviteCodes() });
+    });
+    on('admin:createCode', async (_payload, reply) => {
+      if (!requireAdmin(reply)) return;
+      const code = await uniqueInviteCode();
+      reply({ ok: true, code, codes: await store.listInviteCodes() });
     });
 
     on('auth:login', async ({ nickname, password }, reply) => {

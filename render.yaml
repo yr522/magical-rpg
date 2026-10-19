@@ -14,3 +14,5 @@ services:
         generateValue: true
       - key: DATABASE_URL
         sync: false # Supabase 연결 주소를 대시보드에서 직접 넣는다
+      - key: ADMIN_CODE
+        sync: false # 관리자 계정(admin)을 만들 때 쓰는 비밀 코드. 대시보드에서 직접 넣는다
