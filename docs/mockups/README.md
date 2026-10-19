@@ -14,5 +14,6 @@
 | Inventory.dc.html | 인벤토리 창 |
 | Status.dc.html | 스테이터스 창 |
 | Party.dc.html | 파티 창 |
+| Friends.dc.html | 친구 창 |
 | Shop.dc.html | 상점 창 |
 | Raids.dc.html | 토벌 목록 창 |

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>친구 창 시안</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&amp;family=Noto+Sans+KR:wght@300;400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button,input{font-family:inherit}
+button:focus-visible,input:focus-visible{outline:2px solid #b48cff;outline-offset:2px}
+</style>
+</helmet>
+<!-- 필드 화면 위에 뜨는 팝업 (뒤는 어둡게) — 파티 창과 같은 모양 -->
+<div style="width: 1440px; height: 890px; box-sizing: border-box; position: relative; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans KR', system-ui, sans-serif; font-size: 14px; line-height: 1.5; background: radial-gradient(ellipse at 50% 30%, #2a3b33 0%, #12161a 70%); color: {{t.text}}">
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(5,4,10,0.6)"></div>
+
+  <div style="position: relative; z-index: 1; filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5))">
+    <button type="button" aria-label="친구 창 닫기" style="position: absolute; right: 12px; top: 10px; z-index: 6; width: 18px; height: 18px; padding: 0; border: none; background: transparent; color: #ffffff; font-size: 13px; line-height: 1; cursor: pointer">×</button>
+    <section role="dialog" aria-label="친구" style="position: relative; width: 480px; height: 440px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 22px 24px 18px; background: linear-gradient(135deg, {{t.panel}} 0%, {{t.bg}} 100%)">
+
+      <!-- 우클릭 메뉴가 열려 있을 때, 다른 데를 누르면 닫힘 -->
+      <sc-if value="{{menuOpen}}" hint-placeholder-val="{{false}}">
+        <div aria-hidden="true" onClick="{{closeMenu}}" onContextMenu="{{closeMenu}}" style="position: absolute; inset: 0; z-index: 3"></div>
+      </sc-if>
+
+      <header style="display: flex; flex-direction: column; gap: 8px; padding-right: 24px">
+        <div style="display: flex; align-items: baseline; justify-content: space-between">
+          <h1 style="margin: 0; font-family: 'Gowun Batang', serif; font-size: 22px; font-weight: 700">친구</h1>
+          <span style="font-size: 13px; color: {{t.muted}}">접속 중 {{onlineCount}} / {{count}}명</span>
+        </div>
+        <div aria-hidden="true" style="display: flex; align-items: center; gap: 12px; color: {{t.accent}}">
+          <span style="flex: 1; height: 2px; background: {{t.accent}}"></span>
+          <span style="font-size: 14px; line-height: 1">✦</span>
+          <span style="flex: 1; height: 2px; background: {{t.accent}}"></span>
+        </div>
+      </header>
+
+      <!-- 친구 목록 (접속 중 → 전투 중 → 오프라인 순, 넘치면 스크롤) -->
+      <ul aria-label="친구 목록" style="flex: 1; min-height: 0; overflow-y: auto; margin: 0; padding: 0 6px 0 0; list-style: none; display: flex; flex-direction: column; gap: 6px">
+        <!-- 받은 친구 신청 -->
+        <sc-for list="{{requests}}" as="q" hint-placeholder-count="1">
+          <li style="flex: none; height: 54px; box-sizing: border-box; padding: 0 12px; display: flex; align-items: center; gap: 12px; border-radius: 10px; border: 1px dashed {{t.accent}}">
+            <span aria-hidden="true" style="{{q.avatar}}">{{q.initial}}</span>
+            <span style="flex: 1; min-width: 0"><b style="font-weight: 700">{{q.name}}</b><span style="display: block; font-size: 12px; color: {{t.muted}}">친구 신청을 보냈어요</span></span>
+            <button type="button" onClick="{{q.accept}}" style="height: 28px; padding: 0 10px; border-radius: 8px; border: none; background: {{t.accent}}; color: {{t.accentText}}; font-size: 12px; font-weight: 700; cursor: pointer">수락</button>
+            <button type="button" onClick="{{q.reject}}" style="height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid {{t.line}}; background: transparent; color: {{t.muted}}; font-size: 12px; cursor: pointer">거절</button>
+          </li>
+        </sc-for>
+        <sc-for list="{{friends}}" as="m" hint-placeholder-count="4">
+          <li onContextMenu="{{m.openMenu}}" title="우클릭: 프로필 보기 · 친구 삭제" style="{{m.rowStyle}}">
+            <span aria-hidden="true" style="{{m.avatar}}">{{m.initial}}</span>
+            <span style="flex: 1; min-width: 0">
+              <b style="font-weight: 700">{{m.name}}</b>
+              <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: {{t.muted}}">Lv.{{m.level}} · {{m.cls}} · 📍 {{m.where}}</span>
+            </span>
+            <span style="flex: none; font-size: 12px; color: {{m.stateColor}}">● {{m.state}}</span>
+            <!-- 우클릭 메뉴 -->
+            <sc-if value="{{m.menu}}" hint-placeholder-val="{{false}}">
+              <div role="menu" aria-label="{{m.name}} 메뉴" style="position: absolute; right: 12px; top: 40px; z-index: 4; min-width: 120px; padding: 4px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.bg}}; box-shadow: 0 8px 20px rgba(0,0,0,0.5); display: flex; flex-direction: column">
+                <button type="button" role="menuitem" onClick="{{m.profile}}" style="{{menuItem}}">프로필 보기</button>
+                <button type="button" role="menuitem" onClick="{{m.remove}}" style="{{menuItem}}; color: #ff8a96">친구 삭제</button>
+              </div>
+            </sc-if>
+          </li>
+        </sc-for>
+      </ul>
+
+      <footer style="display: flex; align-items: center; justify-content: flex-end">
+        <button type="button" onClick="{{openAdd}}" style="height: 28px; padding: 0 12px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.panel2}}; color: {{t.text}}; font-size: 12px; cursor: pointer">+ 친구 추가</button>
+      </footer>
+
+      <!-- 친구 추가 팝업 -->
+      <sc-if value="{{addOpen}}" hint-placeholder-val="{{false}}">
+        <div style="position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; background: rgba(5,4,10,0.55)">
+          <form onSubmit="{{sendAdd}}" role="dialog" aria-label="친구 추가" style="position: relative; width: 280px; box-sizing: border-box; padding: 18px; display: flex; flex-direction: column; gap: 10px; border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.panel}}">
+            <button type="button" onClick="{{closeAdd}}" aria-label="친구 추가 닫기" style="position: absolute; right: 10px; top: 8px; width: 18px; height: 18px; padding: 0; border: none; background: transparent; color: #ffffff; font-size: 13px; line-height: 1; cursor: pointer">×</button>
+            <label for="friend-name" style="font-size: 14px; font-weight: 700">친구로 추가할 캐릭터 이름</label>
+            <input id="friend-name" value="{{addName}}" onChange="{{onAddName}}" placeholder="예: 카논" autocomplete="off" style="height: 38px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.panel2}}; color: {{t.text}}; font-size: 14px">
+            <p role="status" style="margin: 0; min-height: 18px; font-size: 12px; color: #ff8a96">{{addMsg}}</p>
+            <button type="submit" style="height: 34px; border-radius: 8px; border: none; background: {{t.accent}}; color: {{t.accentText}}; font-size: 14px; font-weight: 700; cursor: pointer">친구 신청 보내기</button>
+          </form>
+        </div>
+      </sc-if>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":890}}'>
+const EXISTS = ['카논', '미오', '레이', '유키', '릴리', '벨라', '하나이'];
+const ORDER = { online: 0, battle: 1, offline: 2 };
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      dark: true,
+      friends: [
+        { name: '릴리', level: 5, cls: '서포터', status: 'battle', where: '공원 균열 - 균열의 중심', tint: '#2f6f8f' },
+        { name: '벨라', level: 4, cls: '가디언', status: 'offline', where: '본부 - 광장', tint: '#8f4a2f' },
+        { name: '하나이', level: 6, cls: '어태커', status: 'online', where: '본부 - 상점', tint: '#6f2f8f' },
+        { name: '유키', level: 2, cls: '서포터', status: 'offline', where: '공원 균열 - 숲길', tint: '#2f8f7a' },
+      ],
+      requests: [{ name: '미오', level: 3, cls: '가디언', status: 'online', where: '본부 - 광장', tint: '#8f7a2f' }],
+      menu: null,
+      addOpen: false, addName: '', addMsg: '',
+    };
+  }
+
+  theme() {
+    return this.state.dark
+      ? { bg: '#0f0e15', panel: '#1a1823', panel2: '#23202f', line: '#34304a', text: '#e7e3f2', muted: '#a49eba', accent: '#b48cff', accentText: '#160f24', title: '#f2c97a' }
+      : { bg: '#f3f0f8', panel: '#ffffff', panel2: '#ece8f4', line: '#d4cde4', text: '#1d1a28', muted: '#5c5570', accent: '#6b3fd1', accentText: '#ffffff', title: '#9a5b00' };
+  }
+
+  renderVals() {
+    const t = this.theme();
+    const s = this.state;
+    const avatar = (m) => `flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #ffffff; background: linear-gradient(160deg, ${m.tint} 0%, #14111d 100%); ${m.status === 'offline' ? 'filter: grayscale(1) brightness(0.7);' : ''}`;
+    const sorted = [...s.friends].sort((a, b) => ORDER[a.status] - ORDER[b.status]);
+    const friends = sorted.map((m) => {
+      const ST = { online: ['접속 중', '#7fd49a'], battle: ['전투 중', '#ff5c6c'], offline: ['오프라인', t.muted] }[m.status];
+      return {
+        ...m,
+        initial: m.name.slice(0, 1),
+        state: ST[0],
+        stateColor: ST[1],
+        menu: s.menu === m.name,
+        avatar: avatar(m),
+        rowStyle: `position: relative; flex: none; height: 54px; box-sizing: border-box; padding: 0 12px; display: flex; align-items: center; gap: 12px; border-radius: 10px; background: ${s.menu === m.name ? t.line : t.panel2}; cursor: context-menu`,
+        openMenu: (e) => { e.preventDefault(); this.setState({ menu: m.name }); },
+        profile: () => this.setState({ menu: null }), // 실제 게임: 그 친구의 OC 프로필 창이 열린다
+        remove: () => this.setState((st) => ({ friends: st.friends.filter((x) => x.name !== m.name), menu: null })),
+      };
+    });
+    const requests = s.requests.map((q) => ({
+      ...q,
+      initial: q.name.slice(0, 1),
+      avatar: avatar(q),
+      accept: () => this.setState((st) => ({ requests: st.requests.filter((x) => x.name !== q.name), friends: [...st.friends, q] })),
+      reject: () => this.setState((st) => ({ requests: st.requests.filter((x) => x.name !== q.name) })),
+    }));
+
+    return {
+      t, friends, requests,
+      count: s.friends.length,
+      onlineCount: s.friends.filter((m) => m.status !== 'offline').length,
+      menuOpen: Boolean(s.menu),
+      closeMenu: (e) => { if (e) e.preventDefault(); this.setState({ menu: null }); },
+      menuItem: `height: 32px; padding: 0 10px; text-align: left; border-radius: 6px; border: none; background: transparent; color: ${t.text}; font-size: 13px; cursor: pointer`,
+      addOpen: s.addOpen,
+      openAdd: () => this.setState({ addOpen: true, addName: '', addMsg: '' }),
+      closeAdd: () => this.setState({ addOpen: false }),
+      addName: s.addName,
+      onAddName: (e) => this.setState({ addName: e.target.value, addMsg: '' }),
+      addMsg: s.addMsg,
+      sendAdd: (e) => {
+        e.preventDefault();
+        const n = s.addName.trim();
+        if (!n) return this.setState({ addMsg: '이름을 적어 주세요.' });
+        if (s.friends.some((m) => m.name === n)) return this.setState({ addMsg: '이미 친구예요.' });
+        if (!EXISTS.includes(n)) return this.setState({ addMsg: '그런 이름의 캐릭터가 없어요.' });
+        // 오프라인이어도 신청은 가고, 상대가 접속하면 받은 신청에 보인다
+        this.setState({ addOpen: false });
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>
