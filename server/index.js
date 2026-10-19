@@ -20,6 +20,7 @@ const GLOBAL_HISTORY = 50;
 const MAX_CHARACTERS_PER_USER = 5;
 
 const DEATH_GOLD_PENALTY = 0.1;
+const BAG_SIZE = game.characterData.bagSize; // 가방 최대 칸 수
 
 const zoneRoom = (zoneId) => `zone:${zoneId}`;
 const battleRoom = (eventId) => `battle:${eventId}`;
@@ -66,7 +67,11 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
   const playersInZone = (zoneId) =>
     [...online.values()].filter((e) => e.row.location_id === zoneId).map(playerSummary);
 
-  const sendPlayers = (zoneId) => io.to(zoneRoom(zoneId)).emit('zone:players', playersInZone(zoneId));
+  const sendPlayers = (zoneId) => {
+    io.to(zoneRoom(zoneId)).emit('zone:players', playersInZone(zoneId));
+    // 위치 · 접속 · 전투 상태가 바뀌는 곳마다 불리므로, 파티 정보도 같이 새로 보낸다.
+    for (const party of parties.values()) sendParty(party);
+  };
 
   // 지금 게임 안에 있는 캐릭터 수 (화면 맨 아래 상태 줄)
   const sendOnlineCount = () => io.to(WORLD_ROOM).emit('online:count', { count: online.size });
@@ -107,6 +112,10 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
   const battleHooks = {
     onLog(battle, text) {
       io.to(battleRoom(battle.id)).emit('battle:log', { text });
+    },
+    // 대사 프리셋: 전투 채팅으로 보내면 화면에서 그 사람 컷 옆 말풍선으로 뜬다.
+    onLine(battle, p, text) {
+      io.to(battleRoom(battle.id)).emit('chat', { channel: 'battle', from: { id: p.id, name: p.name, avatarUrl: p.avatarUrl }, text, at: Date.now(), preset: true });
     },
     onUpdate(battle) {
       for (const p of battle.party.values()) online.get(p.id)?.socket?.emit('battle:state', battle.view(p.id));
@@ -150,9 +159,20 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
         row.mp = p.mp;
         row.gold += gold;
         const levels = game.gainExp(row, exp);
-        const drops = game.rollDrops(def.drops, rng);
+        const rolled = game.rollDrops(def.drops, rng);
+        // 가방(최대 칸)이 넘치면 넘치는 아이템은 못 가져온다.
+        const owned = await store.listItemRows(row.id);
+        const drops = [];
+        for (const d of rolled) if (game.bagCellsAfter(owned, [...drops, d]) <= BAG_SIZE) drops.push(d);
         await store.addItems(row.id, drops);
-        Object.assign(outcome, { exp, gold, levelUp: levels, items: drops.map((d) => game.itemView(d)) });
+        Object.assign(outcome, { exp, gold, levelUp: levels, items: drops.map((d) => game.itemView(d)), bagFull: drops.length < rolled.length });
+        // 첫 토벌 승리 칭호
+        const newTitles = game.titlesFor('firstVictory').filter((t) => !game.titlesOf(row).includes(t));
+        if (newTitles.length) {
+          row.titles = [...(Array.isArray(row.titles) ? row.titles : []), ...newTitles];
+          await store.updateProfile(row.id, { titles: row.titles });
+          outcome.newTitles = newTitles;
+        }
       } else {
         // 전멸: 보유 골드 10% 손실, 본부로 귀환 (본부에서 HP/MP 회복).
         const lost = Math.floor(row.gold * DEATH_GOLD_PENALTY);
@@ -229,18 +249,22 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
 
   async function inventoryView(entry) {
     const shop = game.shopInZone(entry.row.location_id);
+    // 판매가는 상점이 없는 곳에서도 보여 준다 (그 구역 상점, 없으면 첫 상점 기준).
+    const priceShop = shop || game.shops.values().next().value;
     const rows = (await store.listItemRows(entry.row.id)).filter((it) => game.items.has(it.code));
-    const equipment = rows.filter((it) => game.items.get(it.code).kind === 'equipment').map((it) => game.itemView(it, shop));
+    const equipment = rows.filter((it) => game.items.get(it.code).kind === 'equipment').map((it) => game.itemView(it, priceShop));
     const stacks = new Map();
     for (const it of rows.filter((r) => game.items.get(r.code).kind !== 'equipment')) {
-      if (!stacks.has(it.code)) stacks.set(it.code, { ...game.itemView(it, shop), id: undefined, count: 0 });
+      if (!stacks.has(it.code)) stacks.set(it.code, { ...game.itemView(it, priceShop), id: undefined, count: 0 });
       stacks.get(it.code).count += 1;
     }
     return {
       character: game.characterView(entry.row),
       equipment,
       stacks: [...stacks.values()],
+      bag: { used: game.bagCells(rows), size: BAG_SIZE },
       shop: shop && { id: shop.id, name: shop.name },
+      priceShop: priceShop && priceShop.name,
     };
   }
 
@@ -249,6 +273,102 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
     const rows = await store.listItemRows(entry.row.id);
     if (id !== undefined) return rows.find((it) => it.id === Number(id)) || null;
     return rows.find((it) => it.code === code && !it.equipped) || null;
+  }
+
+  const rowOf = async (id) => online.get(id)?.row || (await store.getCharacter(id));
+
+  // ---------- 파티 (서버 메모리에만, 최대 MAX_PARTY명) ----------
+  // party: { id, name, customName, leaderId, members: [캐릭터 id], invites: Set<캐릭터 id> }
+  const parties = new Map();
+  const partyOf = new Map(); // 캐릭터 id → 파티 id
+  let nextPartyId = 1;
+  const PARTY_NAME_MAX = 16;
+
+  const partyName = async (party) => party.customName || `${(await rowOf(party.leaderId))?.name || '?'}의 파티`;
+  async function partyView(party) {
+    const members = (await Promise.all(party.members.map(rowOf))).filter(Boolean).map((row) => ({ ...presenceView(row), leader: row.id === party.leaderId }));
+    // 파티장이 맨 위
+    members.sort((a, b) => b.leader - a.leader);
+    return { id: party.id, name: await partyName(party), leaderId: party.leaderId, max: MAX_PARTY, members };
+  }
+  function sendParty(party) {
+    partyView(party).then((view) => {
+      for (const id of party.members) online.get(id)?.socket?.emit('party:update', { party: view });
+    }).catch((err) => console.error('[party]', err));
+  }
+  function leaveParty(charId) {
+    const party = parties.get(partyOf.get(charId));
+    if (!party) return;
+    party.members = party.members.filter((id) => id !== charId);
+    partyOf.delete(charId);
+    online.get(charId)?.socket?.emit('party:update', { party: null });
+    if (!party.members.length) return parties.delete(party.id);
+    // 파티장이 나가면 남은 사람 중 다음 사람이 파티장
+    if (party.leaderId === charId) party.leaderId = party.members[0];
+    sendParty(party);
+  }
+
+  // 친구 · 관계가 바뀌면 상대 화면도 다시 그리게 알린다.
+  const notifyLinks = (charId) => online.get(charId)?.socket?.emit('links:changed');
+
+  // 친구 한 명: 접속 상태(접속 중 / 전투 중 / 오프라인)와 지금(또는 마지막) 위치
+  function presenceView(row) {
+    const entry = online.get(row.id);
+    const zone = game.zones.get(row.location_id);
+    const opt = (list, id) => (game.characterData[list].find((o) => o.id === id) || {}).name || id;
+    return {
+      id: row.id,
+      name: row.name,
+      level: row.level,
+      cls: opt('classes', row.class),
+      avatarUrl: row.avatar_url || null,
+      status: !entry ? 'offline' : entry.battleId ? 'battle' : 'online',
+      where: zone ? `${game.regions.get(zone.region).name} - ${zone.name}` : '알 수 없는 곳',
+    };
+  }
+
+  async function friendsView(charId) {
+    const links = await store.listLinks(charId);
+    const other = (l) => (l.fromId === charId ? l.toId : l.fromId);
+    const withRow = async (l) => {
+      const row = await rowOf(other(l));
+      return row && { linkId: l.id, ...presenceView(row), relation: l.name };
+    };
+    const pick = (fn) => Promise.all(links.filter(fn).map(withRow)).then((list) => list.filter(Boolean));
+    return {
+      friends: await pick((l) => l.kind === 'friend' && l.status === 'accepted'),
+      incoming: await pick((l) => l.kind === 'friend' && l.status === 'pending' && l.toId === charId),
+      sent: await pick((l) => l.kind === 'friend' && l.status === 'pending' && l.fromId === charId),
+      relations: (await pick((l) => l.kind === 'relation')).map((r) => {
+        const l = links.find((x) => x.id === r.linkId);
+        return { ...r, status: l.status, incoming: l.status === 'pending' && l.toId === charId };
+      }),
+    };
+  }
+
+  // 다른 사람에게도 보이는 OC 프로필
+  function profileView(row, worn, viewerId) {
+    const opt = (list, id) => (game.characterData[list].find((o) => o.id === id) || {}).name || id;
+    return {
+      id: row.id,
+      mine: row.id === viewerId,
+      name: row.name,
+      level: row.level,
+      title: game.titleOf(row),
+      gender: opt('genders', row.gender),
+      element: opt('elements', row.element),
+      elementId: row.element,
+      cls: opt('classes', row.class),
+      text: row.profile_text || '',
+      avatarUrl: row.avatar_url || null,
+      cutinUrl: row.cutin_url || null,
+      equipment: Object.fromEntries([...game.slots.keys()].map((slot) => {
+        const it = worn.find((w) => w.slot === slot);
+        return [slot, it ? game.itemView(it) : null];
+      })),
+      slots: [...game.slots.values()].map((s) => ({ id: s.id, name: s.name })),
+      relations: [],
+    };
   }
 
   function leaveBattle(entry, reason) {
@@ -394,8 +514,8 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
     });
 
     on('char:options', async (_payload, reply) => {
-      const { genders, elements, classes, gods, baseStats } = game.characterData;
-      reply({ ok: true, options: { genders, elements, classes, gods, baseStats } });
+      const { genders, elements, classes, gods, baseStats, profile } = game.characterData;
+      reply({ ok: true, options: { genders, elements, classes, gods, baseStats, profile } });
     });
 
     on('char:list', async (_payload, reply) => {
@@ -430,6 +550,7 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
         online.get(row.id).socket?.emit('kicked', { reason: '캐릭터가 삭제되었습니다.' });
         removeFromWorld(row.id);
       }
+      leaveParty(row.id);
       await store.deleteCharacter(socket.data.userId, row.id);
       reply({ ok: true });
     });
@@ -485,6 +606,217 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
         healed,
       });
       sendPlayers(to);
+    });
+
+    // ---------- 친구 · 관계 ----------
+    const needEntry = (reply) => {
+      const entry = currentEntry(socket);
+      if (!entry) reply({ error: '캐릭터를 먼저 골라 주세요.' });
+      return entry;
+    };
+
+    on('friends:list', async (_payload, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      reply({ ok: true, ...(await friendsView(entry.row.id)) });
+    });
+
+    on('friends:request', async ({ name }, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      const target = await store.getCharacterByName(String(name || '').trim());
+      if (!target) return reply({ error: '그런 이름의 캐릭터가 없어요.' });
+      if (target.id === entry.row.id) return reply({ error: '나 자신은 친구로 추가할 수 없어요.' });
+      const links = await store.listLinks(entry.row.id);
+      const pair = links.filter((l) => l.kind === 'friend' && [l.fromId, l.toId].includes(target.id));
+      if (pair.some((l) => l.status === 'accepted')) return reply({ error: '이미 친구예요.' });
+      if (pair.some((l) => l.fromId === entry.row.id)) return reply({ error: '이미 친구 신청을 보냈어요.' });
+      const incoming = pair.find((l) => l.toId === entry.row.id);
+      // 상대가 먼저 신청했으면 바로 친구가 된다. 오프라인이어도 신청은 남는다.
+      if (incoming) await store.setLinkStatus(incoming.id, 'accepted');
+      else await store.addLink({ kind: 'friend', fromId: entry.row.id, toId: target.id });
+      notifyLinks(target.id);
+      reply({ ok: true, accepted: Boolean(incoming), ...(await friendsView(entry.row.id)) });
+    });
+
+    // 받은 신청(친구 · 관계) 수락 / 거절, 보낸 신청 취소, 성립한 것 해제 — 모두 링크 번호로.
+    on('links:answer', async ({ linkId, accept }, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      const link = (await store.listLinks(entry.row.id)).find((l) => l.id === Number(linkId));
+      if (!link || link.toId !== entry.row.id || link.status !== 'pending') return reply({ error: '받은 신청이 아닙니다.' });
+      if (accept) await store.setLinkStatus(link.id, 'accepted');
+      else await store.deleteLink(link.id);
+      notifyLinks(link.fromId);
+      reply({ ok: true, ...(await friendsView(entry.row.id)) });
+    });
+
+    on('links:remove', async ({ linkId }, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      const links = await store.listLinks(entry.row.id);
+      const link = links.find((l) => l.id === Number(linkId));
+      if (!link) return reply({ error: '없는 친구 · 관계입니다.' });
+      const other = link.fromId === entry.row.id ? link.toId : link.fromId;
+      await store.deleteLink(link.id);
+      // 친구를 끊으면 그 사람과의 관계도 같이 없어진다.
+      if (link.kind === 'friend') {
+        for (const l of links) if (l.kind === 'relation' && [l.fromId, l.toId].includes(other)) await store.deleteLink(l.id);
+      }
+      notifyLinks(other);
+      reply({ ok: true, ...(await friendsView(entry.row.id)) });
+    });
+
+    on('relation:request', async ({ id, name }, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      const relName = String(name || '').trim();
+      const max = game.profileRules.relationMax;
+      if (!relName || relName.length > max) return reply({ error: `관계 이름은 1~${max}자로 적어 주세요.` });
+      const other = Number(id);
+      const links = await store.listLinks(entry.row.id);
+      const isFriend = links.some((l) => l.kind === 'friend' && l.status === 'accepted' && [l.fromId, l.toId].includes(other));
+      if (!isFriend) return reply({ error: '친구 목록에 있는 사람에게만 관계를 신청할 수 있어요.' });
+      if (links.some((l) => l.kind === 'relation' && [l.fromId, l.toId].includes(other))) return reply({ error: '이미 그 사람과의 관계가 있거나 신청 중이에요.' });
+      await store.addLink({ kind: 'relation', fromId: entry.row.id, toId: other, name: relName });
+      notifyLinks(other);
+      reply({ ok: true, ...(await friendsView(entry.row.id)) });
+    });
+
+    // ---------- 파티 ----------
+    const myParty = (entry) => parties.get(partyOf.get(entry.row.id)) || null;
+    const replyParty = async (reply, entry) => {
+      const party = myParty(entry);
+      reply({ ok: true, party: party ? await partyView(party) : null });
+    };
+
+    on('party:view', async (_payload, reply) => {
+      const entry = needEntry(reply);
+      if (entry) await replyParty(reply, entry);
+    });
+
+    // 초대: 접속 중인 캐릭터에게만. 파티가 없으면 내가 파티장인 파티를 만든다.
+    on('party:invite', async ({ name }, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      const wanted = String(name || '').trim().toLowerCase();
+      if (!wanted) return reply({ error: '이름을 적어 주세요.' });
+      const target = [...online.values()].find((e) => e.row.name.toLowerCase() === wanted);
+      if (!target) return reply({ error: (await store.getCharacterByName(wanted)) ? '캐릭터가 오프라인입니다.' : '그런 이름의 캐릭터가 없어요.' });
+      if (!target.socket) return reply({ error: '캐릭터가 오프라인입니다.' });
+      if (target.row.id === entry.row.id) return reply({ error: '나 자신은 초대할 수 없어요.' });
+      let party = myParty(entry);
+      if (party && party.leaderId !== entry.row.id) return reply({ error: '파티장만 초대할 수 있어요.' });
+      if (party && party.members.includes(target.row.id)) return reply({ error: '이미 파티에 있는 캐릭터예요.' });
+      if (partyOf.has(target.row.id)) return reply({ error: '이미 다른 파티에 있는 캐릭터예요.' });
+      if (party && party.members.length >= MAX_PARTY) return reply({ error: `파티가 가득 찼어요. (최대 ${MAX_PARTY}명)` });
+      if (!party) {
+        party = { id: nextPartyId++, customName: null, leaderId: entry.row.id, members: [entry.row.id], invites: new Set() };
+        parties.set(party.id, party);
+        partyOf.set(entry.row.id, party.id);
+      }
+      party.invites.add(target.row.id);
+      target.socket.emit('party:invited', { partyId: party.id, from: entry.row.name, name: await partyName(party) });
+      sendParty(party);
+      await replyParty(reply, entry);
+    });
+
+    on('party:respond', async ({ partyId, accept }, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      const party = parties.get(Number(partyId));
+      if (!party || !party.invites.has(entry.row.id)) return reply({ error: '초대가 없거나 끝났어요.' });
+      party.invites.delete(entry.row.id);
+      if (!accept) {
+        online.get(party.leaderId)?.socket?.emit('log', { text: `${entry.row.name}이(가) 파티 초대를 거절했다.` });
+        return reply({ ok: true, party: null });
+      }
+      if (partyOf.has(entry.row.id)) return reply({ error: '이미 다른 파티에 있어요. 먼저 나가 주세요.' });
+      if (party.members.length >= MAX_PARTY) return reply({ error: '파티가 가득 찼어요.' });
+      party.members.push(entry.row.id);
+      partyOf.set(entry.row.id, party.id);
+      sendParty(party);
+      await replyParty(reply, entry);
+    });
+
+    on('party:leave', async (_payload, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      leaveParty(entry.row.id);
+      reply({ ok: true, party: null });
+    });
+
+    // 파티장만: 추방 · 파티장 위임 · 이름 바꾸기
+    const leaderCommand = (event, handler) => on(event, async (payload, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      const party = myParty(entry);
+      if (!party || party.leaderId !== entry.row.id) return reply({ error: '파티장만 할 수 있어요.' });
+      const error = await handler(party, payload, entry);
+      if (error) return reply({ error });
+      sendParty(party);
+      await replyParty(reply, entry);
+    });
+    leaderCommand('party:kick', async (party, { id }) => {
+      const target = Number(id);
+      if (!party.members.includes(target) || target === party.leaderId) return '추방할 수 없는 멤버예요.';
+      leaveParty(target);
+      online.get(target)?.socket?.emit('log', { text: '파티에서 추방되었다.' });
+      return null;
+    });
+    leaderCommand('party:delegate', async (party, { id }) => {
+      const target = Number(id);
+      if (!party.members.includes(target) || target === party.leaderId) return '위임할 수 없는 멤버예요.';
+      party.leaderId = target;
+      return null;
+    });
+    leaderCommand('party:rename', async (party, { name }) => {
+      const clean = String(name || '').trim();
+      if (clean.length > PARTY_NAME_MAX) return `파티 이름은 ${PARTY_NAME_MAX}자까지예요.`;
+      party.customName = clean || null; // 비우면 기본 이름(파티장 이름의 파티)
+      return null;
+    });
+
+    // ---------- OC 프로필 ----------
+    on('profile:view', async ({ id }, reply) => {
+      const entry = currentEntry(socket);
+      if (!entry) return reply({ error: '캐릭터를 먼저 골라 주세요.' });
+      const targetId = id == null ? entry.row.id : Number(id);
+      const row = online.get(targetId)?.row || (await store.getCharacter(targetId));
+      if (!row) return reply({ error: '그런 캐릭터가 없습니다.' });
+      const worn = (await store.listItemRows(row.id)).filter((it) => it.equipped && game.items.has(it.code));
+      const profile = profileView(row, worn, entry.row.id);
+      const links = await store.listLinks(row.id);
+      profile.relations = await Promise.all(links.filter((l) => l.kind === 'relation' && l.status === 'accepted').map(async (l) => {
+        const other = l.fromId === row.id ? l.toId : l.fromId;
+        return { id: other, name: (await rowOf(other))?.name || '?', relation: l.name };
+      }));
+      // 보는 사람과 이 캐릭터의 친구 상태: none / sent / incoming / friend
+      const f = links.find((l) => l.kind === 'friend' && [l.fromId, l.toId].includes(entry.row.id) && row.id !== entry.row.id);
+      profile.friend = !f ? 'none' : f.status === 'accepted' ? 'friend' : f.fromId === entry.row.id ? 'sent' : 'incoming';
+      profile.friendLinkId = f?.id || null;
+      reply({ ok: true, profile });
+    });
+
+    on('profile:checkName', async ({ name }, reply) => {
+      const entry = currentEntry(socket);
+      if (!entry) return reply({ error: '캐릭터를 먼저 골라 주세요.' });
+      const check = game.validateProfile({ name }, entry.row);
+      if (check.error) return reply({ ok: true, available: false, reason: check.error });
+      const taken = check.fields.name && (await store.isNameTaken(check.fields.name, entry.row.id));
+      reply({ ok: true, available: !taken, reason: taken ? '이미 서버에 있는 이름이에요. 다른 이름을 골라 주세요.' : '' });
+    });
+
+    on('profile:update', async (input, reply) => {
+      const entry = currentEntry(socket);
+      if (!entry) return reply({ error: '캐릭터를 먼저 골라 주세요.' });
+      const { error, fields } = game.validateProfile(input, entry.row);
+      if (error) return reply({ error });
+      if (!(await store.updateProfile(entry.row.id, fields))) return reply({ error: '이미 서버에 있는 이름이에요. 다른 이름을 골라 주세요.' });
+      const renamed = fields.name && fields.name !== entry.row.name;
+      Object.assign(entry.row, fields);
+      if (renamed) sendPlayers(entry.row.location_id);
+      reply({ ok: true, character: game.characterView(entry.row) });
     });
 
     on('look', async (_payload, reply) => {
@@ -567,10 +899,20 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
       reply({ ok: true, message: result.message, ...(await inventoryView(entry)) });
     });
 
-    itemCommand('inventory:equip', async (entry, { id }) => {
+    itemCommand('inventory:equip', async (entry, { id, slot }) => {
       const item = await findOwnedItem(entry, { id });
-      if (!item || game.items.get(item.code)?.kind !== 'equipment') return { error: '장착할 수 없는 아이템입니다.' };
+      const def = item && game.items.get(item.code);
+      if (!def || def.kind !== 'equipment') return { error: '장착할 수 없는 아이템입니다.' };
       if (item.equipped) return { error: '이미 장착 중입니다.' };
+      // 칸을 안 고르면: 기본 칸, 기본 칸이 차 있고 같은 종류 칸(장신구 2)이 비어 있으면 그쪽.
+      let target = slot || def.slot;
+      if (!slot) {
+        const worn = new Set((await store.listItemRows(entry.row.id)).filter((it) => it.equipped).map((it) => it.slot));
+        const alt = [...game.slots.values()].find((s) => s.same === def.slot);
+        if (worn.has(def.slot) && alt && !worn.has(alt.id)) target = alt.id;
+      }
+      if (!game.slotFits(def, target)) return { error: '그 칸에는 낄 수 없는 장비입니다.' };
+      if (target !== item.slot) await store.setItemSlot(entry.row.id, item.id, target);
       if (!(await store.setEquipped(entry.row.id, item.id, true))) return { error: '장착하지 못했습니다.' };
       await loadEquipment(entry.row);
       clampVitals(entry.row);
@@ -643,9 +985,10 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
       const n = Number(count);
       if (!Number.isInteger(n) || n < 1 || n > 20) return { error: '한 번에 1~20개까지 살 수 있습니다.' };
       const cost = game.buyPrice(shop, code) * n;
-      if (entry.row.gold < cost) return { error: `골드가 부족합니다. (${cost} G 필요)` };
       const def = game.items.get(code);
       const add = Array.from({ length: n }, () => (def.kind === 'equipment' ? { code, grade: 'common', options: {}, slot: def.slot } : code));
+      if (game.bagCellsAfter(await store.listItemRows(entry.row.id), add) > BAG_SIZE) return { error: `가방이 가득 찼습니다. (최대 ${BAG_SIZE}칸)` };
+      if (entry.row.gold < cost) return { error: `골드가 부족합니다. (${cost} G 필요)` };
       // 메모리의 골드를 먼저 바꿔 두고, 저장에 실패하면 되돌린다.
       entry.row.gold -= cost;
       if (!(await store.applyChange(entry.row.id, { gold: entry.row.gold, add }))) {

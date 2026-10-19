@@ -51,6 +51,21 @@
 | 추가 옵션 | 고급·희귀 1개, 영웅·전설 2개, 신화 3개. 무작위 스탯 +1 (영웅부터 +2) | `items.json`의 `grades` |
 | 분해 | 균열 파편: 일반 1 · 고급 2 · 희귀 4 · 영웅 8 · 전설 16 · 신화 30개 | `items.json`의 `grades.shards` |
 | 상점 장비 | 일반 등급만 판매 | `shops.json` |
+| 가방 | 최대 100칸 (기획자 결정). 장비는 한 개당 한 칸, 나머지는 같은 종류끼리 한 칸. 가득 차면 상점에서 살 수 없고, 전투에서 넘치는 드롭은 못 가져온다 | `server/data/character.json`의 `bagSize` |
+| 장비 부위 | 6칸: 무기 · 의상 · 장신구 · 머리장식 · 신발 · 장신구 2 (기획자 결정). 장신구는 장신구 2 칸에도 낄 수 있다 | `items.json`의 `slots` |
+| 새 장비 (임시) | 별꽃 머리핀(머리장식, MAG+1 LUK+1) · 가죽 부츠(신발, AGI+2), 본부 상점에서 판매 | `items.json`, `shops.json` |
+| 판매가 표시 | 상점이 없는 곳에서는 본부 상점 기준으로 보여 준다 | `server/index.js`의 `inventoryView` |
+| 아이템 그림 | 지금은 이모지. 나중에 그림으로 바꿀 수 있다 | `items.json`의 `icon` |
+| 프로필 사진 저장 | 브라우저에서 줄인 그림(프사 320×320, 컷인 280×560 JPEG)을 DB에 바로 저장. 한 장 최대 300KB. (기획서의 Supabase 파일 저장소는 나중에) | `public/app.js`의 `resizeImage`, `server/game.js`의 `validateProfile` |
+| 칭호 | 처음: [견습 계약자], 첫 토벌 승리: [첫 토벌의 증인] | `character.json`의 `profile.titles` |
+| 대사 프리셋 | 상황 7가지(전투 시작 · 공격 · 스킬 · 다침 · 회복받음 · 쓰러짐 · 승리), 상황마다 3개, 한 줄 40자. 스킬은 스킬마다 따로가 아니라 하나로 묶음 | `character.json`의 `profile` |
+| OC 설정 글 | 2000자까지 | `character.json`의 `profile.textMax` |
+| 친구 신청 | 상대가 오프라인이어도 신청은 남고, 접속하면 받은 신청에 보인다. 서로 신청하면 바로 친구 | `server/index.js`의 `friends:request` |
+| 친구 삭제 | 그 사람과의 관계도 같이 없어진다 | `server/index.js`의 `links:remove` |
+| 관계 이름 | 12자까지, 한 사람과 관계 하나 | `character.json`의 `profile.relationMax` |
+| 파티 저장 | 서버 메모리에만 둔다. 서버가 다시 켜지면 파티는 사라진다 (접속을 끊었다 들어오는 건 괜찮다) | `server/index.js`의 `parties` |
+| 파티 초대 | 파티장만 초대할 수 있고, 받은 사람은 바닥 글 상자에서 [들어간다] / [거절한다]. 파티가 없을 때 초대하면 내가 파티장인 파티가 생긴다 | `server/index.js`의 `party:invite` |
+| 친구 · 파티 창 | 같은 아이콘이라 창 위쪽 [친구] [파티] 탭으로 오간다 | `public/app.js`의 `listTabs` |
 
 **덩굴 포식자 장비 드롭 확률 (한 번 잡을 때 각각 따로 굴림)**
 

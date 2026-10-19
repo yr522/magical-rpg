@@ -21,6 +21,7 @@
     draft: {},
     battle: null, // 전투 중이면 서버가 보낸 전투 화면 데이터
     battleMenu: 'main', // main / skill / item
+    party: null, // 들어가 있는 파티
     fieldMenu: 'main', // main / move
     bubbles: new Map(), // 캐릭터 id → { text, until } 말풍선
   };
@@ -65,11 +66,16 @@
 
   const optionName = (list, id) => (state.options?.[list].find((o) => o.id === id) || {}).name || id;
 
-  function openModal(content) {
+  function openModal(content, cls = 'pop-small') {
+    $('modal-panel').className = `popup ${cls}`;
     $('modal-content').replaceChildren(content);
     $('modal').classList.remove('hidden');
   }
-  $('modal-close').addEventListener('click', () => $('modal').classList.add('hidden'));
+  const closeModal = () => $('modal').classList.add('hidden');
+  $('modal-close').addEventListener('click', closeModal);
+  // 창 바깥(어두운 곳)을 누르거나 Esc를 누르면 닫힌다.
+  $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('modal').classList.contains('hidden')) closeModal(); });
 
   // ---------- 접속 / 로그인 ----------
   // 처음 접속했을 때의 서버 버전을 기억해 두고, 다시 연결됐을 때 버전이 바뀌었으면
@@ -244,6 +250,7 @@
     shop: 'M4 7h16l-1 4H5zM5 11v8h14v-8M9 19v-5h6v5',
     back: 'M19 12H5M11 6l-6 6 6 6',
   };
+  const GEAR_PATH = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z';
   const SVG_NS = 'http://www.w3.org/2000/svg';
   function icon(path, size = 22) {
     const svg = document.createElementNS(SVG_NS, 'svg');
@@ -297,6 +304,8 @@
     for (const msg of history) addChat(msg);
     if (data.resumed) addSystem('연결이 다시 이어졌다.');
     setOnline(data.onlineCount);
+    state.party = null;
+    renderPartyPanel();
     setBattleMode(false);
     enterZone(data.zone, data.players);
     show('game');
@@ -375,7 +384,7 @@
     tiles.push(tile('이동', ICONS.move, () => { state.fieldMenu = 'move'; renderActions(); }));
     tiles.push(tile('둘러보기', ICONS.look, look));
     tiles.push(tile('토벌 목록', ICONS.raids, raidList));
-    if (zone.shop) tiles.push(tile(zone.shop.name, ICONS.shop, () => openShop('buy')));
+    if (zone.shop) tiles.push(tile(zone.shop.name, ICONS.shop, () => openShop()));
     box.replaceChildren(el('div', { class: 'tiles' }, tiles));
   }
 
@@ -400,7 +409,7 @@
     $('players').replaceChildren(...players.map((p) => el('li', {}, [
       el('span', { class: 'lv', text: `Lv.${p.level} ` }),
       p.title ? el('span', { style: 'color:#f2c97a', text: `[${p.title}] ` }) : null,
-      el('span', { class: p.id === meId ? 'me' : '', text: p.name }),
+      el('button', { type: 'button', class: `pname ${p.id === meId ? 'me' : ''}`, text: p.name, title: `${p.name}의 프로필 보기`, onclick: () => openProfile(p.id) }),
       p.inBattle ? el('span', { class: 'dim', text: ' · 전투 중' }) : null,
       p.away ? el('span', { class: 'dim', text: ' · 자리 비움' }) : null,
     ])));
@@ -427,14 +436,28 @@
     showCaption(res.text);
   }
 
+  // 토벌 목록: 2열 카드가 아래로 이어지고 넘치면 스크롤. 정보만 보여 준다 (입장은 그 장소에서).
   async function raidList() {
     const res = await request('raid:list');
     if (res.error) return toast(res.error);
-    const rows = res.events.map((ev) => el('div', { class: `region ${ev.here ? 'here' : ''}` }, [
-      el('strong', { text: `${ev.monsterName} Lv.${ev.monsterLevel}` }),
-      el('div', { class: 'muted', text: `${ev.regionName} - ${ev.zoneName} · 등급 ${ev.grade} · ${ev.remaining || '-'} · 참가 ${ev.participants}/${ev.max}` }),
-    ]));
-    openModal(el('div', {}, [el('h2', { text: '토벌 목록' }), ...(rows.length ? rows : [el('p', { class: 'muted', text: '지금 열린 토벌 이벤트가 없다.' })])]));
+    const card = (ev) => el('li', { class: `raid-card ${ev.here ? 'here' : ''}` }, [
+      el('div', { class: 'rtop' }, [
+        el('b', { text: ev.monsterName }), el('small', { text: `Lv.${ev.monsterLevel}` }),
+        el('span', { class: `grade g-${ev.grade}`, text: ev.grade }),
+      ]),
+      el('span', { class: 'rwhere', text: `${ev.regionName} - ${ev.zoneName}` }),
+      el('div', { class: 'rbottom' }, [
+        el('span', { class: ev.remaining && ev.remaining !== '무기한' ? 'rtime' : 'rtime none', text: ev.remaining || '무기한' }),
+        el('span', { class: 'seats' }, [
+          el('span', { class: 'dots', 'aria-hidden': 'true' }, Array.from({ length: ev.max }, (_, i) => el('span', { class: i < ev.participants ? 'on' : '' }))),
+          `참가 ${ev.participants} / ${ev.max}`,
+        ]),
+      ]),
+    ]);
+    openModal(el('div', { class: 'raid-win' }, [
+      el('header', {}, [el('div', { class: 'phead' }, [el('h2', { class: 'ptitle', text: '토벌 목록' }), el('span', { class: 'who', text: `진행 중 ${res.events.length}건` })]), ornament()]),
+      res.events.length ? el('ul', { class: 'raid-grid' }, res.events.map(card)) : el('p', { class: 'muted', text: '지금 열린 토벌 이벤트가 없다.' }),
+    ]), 'pop-raid');
   }
 
   async function enterRaid(eventId) {
@@ -474,7 +497,8 @@
     renderBattle();
   });
 
-  socket.on('battle:log', ({ text }) => addBattleLog(text));
+  // 첫 전투 화면이 오기 전에 온 기록은 버린다 (첫 화면에 지금까지의 기록이 다 들어 있다).
+  socket.on('battle:log', ({ text }) => { if (state.battle) addBattleLog(text); });
 
   socket.on('battle:end', (data) => {
     setBattleMode(false);
@@ -620,6 +644,8 @@
       lines.push(`경험치 +${data.exp}`, `골드 +${data.gold}`);
       if (!data.items.length) lines.push('획득한 아이템 없음');
       if (data.levelUp) lines.push(`레벨 업! Lv.${c.level} — 스탯 포인트 +${data.levelUp * 3} (스테이터스에서 분배)`);
+      if (data.newTitles?.length) lines.push(`새 칭호: ${data.newTitles.map((t) => `[${t}]`).join(' ')} (프로필 편집에서 달 수 있어요)`);
+      if (data.bagFull) lines.push('가방이 가득 차서 일부 아이템을 가져오지 못했다.');
     } else if (data.result === 'defeat') {
       title = '패배…';
       cls = 'defeat';
@@ -681,14 +707,14 @@
       ava,
       el('span', { class: 'body' }, [
         el('span', { class: 'tag', text: { global: '[서버]', battle: '[전투]' }[msg.channel] || '[지역]' }),
-        el('span', { class: 'name', text: `${msg.from.name}:` }),
+        el('button', { type: 'button', class: 'name', text: `${msg.from.name}:`, title: `${msg.from.name}의 프로필 보기`, onclick: () => openProfile(msg.from.id) }),
         el('span', { class: 'text', text: msg.text }),
       ]),
     ]));
-    if (msg.channel === 'battle' && state.battle) {
-      // 전투 중 채팅은 컷 옆 말풍선으로도 5초간 띄운다.
+    if (msg.channel === 'battle') {
+      // 전투 중 채팅(대사 프리셋 포함)은 컷 옆 말풍선으로도 5초간 띄운다.
       state.bubbles.set(msg.from.id, { text: msg.text, until: Date.now() + 5000 });
-      renderCuts();
+      if (state.battle) renderCuts();
       setTimeout(() => { if (state.battle) renderCuts(); }, 5100);
     }
   }
@@ -724,14 +750,17 @@
     inventory() {
       openInventory();
     },
+    equipment() {
+      openEquipment();
+    },
     status() {
       renderCharacterInfo();
     },
     profile() {
-      toast('OC 프로필은 준비 중이에요.');
+      openProfile();
     },
     community() {
-      toast('파티 · 친구는 준비 중이에요.');
+      openFriends();
     },
     theme() {
       const light = document.body.classList.toggle('light');
@@ -746,49 +775,97 @@
     },
     logout,
   };
+  // ---------- 팝업 창 공통 ----------
+  // 창은 화면 가운데에 뜨고 뒤는 어둡게, 닫기는 창 안 오른쪽 위 작은 흰색 ×. (docs/ui-design.md)
+  const STAT_NAMES_SHORT = { str: ['힘', 'STR'], mag: ['마력', 'MAG'], vit: ['체력', 'VIT'], agi: ['민첩', 'AGI'], luk: ['행운', 'LUK'] };
+  const KIND_NAMES = { consumable: '소모품', material: '재료', equipment: '장비' };
+  const STAT_KO = { str: '힘', mag: '마력', vit: '체력', agi: '민첩', luk: '행운' };
+  const statText = (stats) => Object.entries(stats || {}).filter(([, v]) => v).map(([k, v]) => `${STAT_KO[k]} +${v}`).join(' · ') || '보너스 없음';
+  // 장비 이름은 등급 색으로.
+  const itemName = (it) => el('span', { class: 'item-name', style: it.color ? `color:${it.color}` : '', text: it.gradeName ? `[${it.gradeName}] ${it.name}` : it.name });
+  const ornament = (extra = '') => el('div', { class: `ornament ${extra}`, 'aria-hidden': 'true' }, [el('span'), el('i', { text: '✦' }), el('span')]);
+
+  // 아이템 칸 하나 (장비 테두리 = 희귀도 색, 2개 이상이면 오른쪽 아래 개수)
+  function itemCell(it, { selected, onclick, count } = {}) {
+    if (!it) return el('span', { class: 'cell empty', 'aria-hidden': 'true' });
+    return el('button', {
+      type: 'button', class: `cell ${selected ? 'on' : ''}`, role: 'option', 'aria-selected': String(Boolean(selected)),
+      'aria-label': `${it.name}${count > 1 ? ` ${count}개` : ''}`, title: it.name,
+      style: it.color ? `border-color:${it.color};box-shadow:${selected ? '' : `0 0 8px ${it.color}55`}` : '', onclick,
+    }, [el('span', { class: 'ico', text: it.icon || '📦' }), count > 1 ? el('span', { class: 'cnt', text: String(count) }) : null]);
+  }
+  // 가방 칸들 (빈 칸도 점선으로 채워서 보여 준다)
+  function cellGrid(cells, min = 30) {
+    const total = Math.max(min, Math.ceil(cells.length / 5) * 5);
+    return el('div', { class: 'cells', role: 'listbox' }, [...cells, ...Array.from({ length: total - cells.length }, () => itemCell(null))]);
+  }
+  // 고른 아이템 설명 (인벤토리 · 상점 공통)
+  function itemDetail(it, { priceLabel, price, actions = [], extra = null }) {
+    const sub = it.gradeName ? `${it.gradeName} · ${it.slotName}` : KIND_NAMES[it.kind];
+    return el('div', { class: 'detail' }, [
+      el('div', { class: 'big-ico', role: 'img', 'aria-label': `${it.name} 그림`, style: it.color ? `border-color:${it.color}` : '', text: it.icon || '📦' }),
+      el('div', {}, [el('p', { class: 'dname', text: it.name }), el('p', { class: 'dsub', style: it.color ? `color:${it.color}` : '', text: sub })]),
+      el('p', { class: 'ddesc', text: it.stats ? `${it.desc}\n${statText(it.stats)}` : it.desc }),
+      el('dl', { class: 'dmeta' }, [
+        el('dt', { text: '습득처' }), el('dd', { text: (it.from || []).join(', ') || '-' }),
+        el('dt', { text: priceLabel }), el('dd', { text: price }),
+      ]),
+      extra,
+      actions.length ? el('div', { class: 'dactions' }, actions) : null,
+    ]);
+  }
+  const actBtn = (label, onclick, main = false) => el('button', { type: 'button', class: main ? 'pbtn main' : 'pbtn', text: label, onclick });
+
+  // 인벤토리 · 장비 · 상점 명령 결과를 받아 상태를 고치고 같은 창을 다시 그린다.
+  async function itemAction(event, payload, rerender, confirmText) {
+    if (confirmText && !confirm(confirmText)) return;
+    const res = await request(event, payload);
+    if (res.error) return toast(res.error);
+    state.character = res.character;
+    renderStatus();
+    rerender(res);
+  }
+
+  // ---------- 스테이터스 창 ----------
   function renderCharacterInfo() {
     const c = state.character;
     const canAllocate = c.statPoints > 0 && !state.battle;
-    const row = (k, v) => el('tr', {}, [el('td', { text: k }), el('td', { text: String(v) })]);
-    const statRow = (k) => {
+    const rows = Object.keys(STAT_NAMES_SHORT).map((k) => {
       const bonus = c.stats[k] - c.baseStats[k];
-      return el('tr', { class: 'stat-row' }, [
-        el('td', { text: STAT_NAMES[k] }),
-        el('td', {}, [
-          String(c.stats[k]),
-          bonus ? el('span', { class: 'bonus', text: ` (장비 +${bonus})` }) : null,
-          canAllocate ? el('button', { text: '+', onclick: () => allocate(k) }) : null,
-        ]),
+      return el('div', { class: 'stat-row' }, [
+        el('span', { class: 'sname' }, [el('b', { text: STAT_NAMES_SHORT[k][0] }), ` `, el('small', { text: STAT_NAMES_SHORT[k][1] })]),
+        el('span', { class: 'sbar', 'aria-hidden': 'true' }, [el('span', { style: `width:${Math.min(100, c.stats[k] * 3)}%` })]),
+        el('span', { class: 'sval' }, [el('b', { text: String(c.stats[k]) }), bonus ? el('small', { text: ` (+${bonus})` }) : null]),
+        el('span', { class: 'splus' }, [canAllocate ? el('button', { type: 'button', 'aria-label': `${STAT_NAMES_SHORT[k][0]} 1 올리기`, text: '+', onclick: () => allocate(k) }) : null]),
       ]);
-    };
-    openModal(el('div', {}, [
-      el('h2', { text: `${c.name}  Lv.${c.level}` }),
-      el('table', { class: 'info-table' }, [
-        row('성별', optionName('genders', c.gender)),
-        row('속성', optionName('elements', c.element)),
-        row('클래스', optionName('classes', c.class)),
-        row('계약 신', optionName('gods', c.god)),
-        row('경험치', c.expToNext ? `${c.exp} / ${c.expToNext}` : '최대 레벨'),
-        row('HP', `${c.hp} / ${c.derived.maxHp}`),
-        row('MP', `${c.mp} / ${c.derived.maxMp}`),
-        ...Object.keys(STAT_NAMES).map(statRow),
-        row('남은 스탯 포인트', c.statPoints),
-        row('회피율', `${c.derived.evasion}%`),
-        row('치명타율', `${c.derived.crit}%`),
+    });
+    const d = c.derived;
+    const traits = [
+      ['속성', optionName('elements', c.element)], ['클래스', optionName('classes', c.class)],
+      ['계약 신', optionName('gods', c.god)], ['경험치', c.expToNext ? `${c.exp} / ${c.expToNext}` : '최대 레벨'],
+      ['HP', `${c.hp} / ${d.maxHp}`], ['MP', `${c.mp} / ${d.maxMp}`],
+      ['공격력', d.physAtk], ['마법 공격력', d.magAtk], ['방어력', d.def],
+      ['회피율', `${d.evasion}%`], ['치명타율', `${d.crit}%`],
+    ];
+    openModal(el('div', { class: 'status-win' }, [
+      el('header', {}, [
+        el('div', { class: 'phead' }, [el('h2', { class: 'ptitle', text: '스테이터스' }), el('span', { class: 'who' }, [el('b', { text: c.name }), el('span', { text: ` Lv.${c.level}` })])]),
+        ornament(),
       ]),
-      el('h3', { text: '스킬' }),
-      el('ul', {}, [
-        ...c.skills.map((sk) => el('li', { text: `${sk.name} (MP ${sk.mp}) — ${sk.desc}` })),
-        c.nextSkill ? el('li', { class: 'muted', text: `Lv.${c.nextSkill}에 새 스킬 해금` }) : null,
+      el('div', { class: 'stats' }, [
+        ...rows,
+        el('p', { class: 'points' }, [el('span'), el('span', {}, ['남은 포인트 ', el('b', { class: c.statPoints > 0 ? 'has' : '', text: String(c.statPoints) })])]),
       ]),
-      el('h3', { text: '장비' }),
-      el('ul', {}, Object.entries(c.equipment).map(([slot, it]) => el('li', {}, [
-        `${SLOT_NAMES[slot]}: `,
-        it ? itemName(it) : el('span', { class: 'muted', text: '없음' }),
-        it ? el('span', { class: 'muted', text: ` (${statText(it.stats)})` }) : null,
-      ]))),
-      el('button', { class: 'secondary', text: '인벤토리 열기', onclick: () => openInventory() }),
-    ]));
+      el('div', { class: 'traits' }, [
+        el('h3', { text: '특성' }),
+        el('div', { class: 'traits-scroll' }, [
+          el('dl', { class: 'trait-grid' }, traits.map(([k, v]) => el('div', {}, [el('dt', { text: k }), el('dd', { text: String(v) })]))),
+          el('h4', { text: '스킬' }),
+          ...c.skills.map((sk) => el('div', { class: 'skill-box' }, [el('div', {}, [el('b', { text: sk.name }), el('small', { text: `MP ${sk.mp}` })]), el('span', { text: sk.desc })])),
+          c.nextSkill ? el('div', { class: 'skill-box locked' }, [el('div', {}, [el('b', { text: '???' }), el('small', { text: `Lv.${c.nextSkill}에 해금` })]), el('span', { text: '레벨을 올리면 새 스킬이 열려요.' })]) : null,
+        ]),
+      ]),
+    ]), 'pop-status');
   }
 
   async function allocate(stat) {
@@ -799,116 +876,702 @@
     renderCharacterInfo();
   }
 
-  // ---------- 인벤토리 · 상점 ----------
-  const SLOT_NAMES = { weapon: '무기', outfit: '의상', accessory: '장신구' };
-  const SHORT_STAT = { str: 'STR', mag: 'MAG', vit: 'VIT', agi: 'AGI', luk: 'LUK' };
-  const statText = (stats) => Object.entries(stats).filter(([, v]) => v).map(([k, v]) => `${SHORT_STAT[k]}+${v}`).join(' ') || '보너스 없음';
-  // 장비 이름은 등급 색으로, 앞에 [등급]을 붙인다.
-  const itemName = (it) => el('span', { class: 'item-name', style: it.color ? `color:${it.color}` : '', text: it.gradeName ? `[${it.gradeName}] ${it.name}` : it.name });
-
-  // 인벤토리·상점 명령 결과를 받아 상태를 고치고 같은 창을 다시 그린다.
-  async function itemAction(event, payload, rerender, confirmText) {
-    if (confirmText && !confirm(confirmText)) return;
-    const res = await request(event, payload);
-    if (res.error) return toast(res.error);
-    state.character = res.character;
-    renderStatus();
-    rerender(res, res.message);
-  }
-
-  async function openInventory() {
+  // ---------- 인벤토리 창 ----------
+  // 소모품 · 재료는 같은 종류끼리 한 칸, 장비는 한 개당 한 칸. 장비는 여기서 낄 수 없다(장비 창에서).
+  async function openInventory(selKey) {
     const res = await request('inventory:list');
     if (res.error) return toast(res.error);
-    renderInventory(res);
+    renderInventory(res, selKey);
   }
 
-  function renderInventory(inv, message) {
-    const again = (res, msg) => renderInventory(res, msg);
-    const equipCard = (it) => el('div', { class: `item-card ${it.equipped ? 'equipped' : ''}` }, [
-      itemName(it),
-      el('div', { class: 'item-meta', text: `${it.slotName} · ${statText(it.stats)}${it.equipped ? ' · 장착 중' : ''}` }),
-      el('div', { class: 'item-meta', text: it.desc }),
-      el('div', { class: 'row' }, it.equipped
-        ? [el('button', { class: 'secondary', text: '벗기', onclick: () => itemAction('inventory:unequip', { id: it.id }, again) })]
-        : [
-          el('button', { text: '장착', onclick: () => itemAction('inventory:equip', { id: it.id }, again) }),
-          el('button', { class: 'secondary', text: `분해 (파편 ${it.shards})`, onclick: () => itemAction('inventory:disassemble', { id: it.id }, again, `${it.name}을(를) 분해할까요? 되돌릴 수 없습니다.`) }),
-          el('button', { class: 'danger', text: '버리기', onclick: () => itemAction('inventory:discard', { id: it.id }, again, `${it.name}을(를) 버릴까요? 되돌릴 수 없습니다.`) }),
-        ]),
-    ]);
-    const stackCard = (it) => el('div', { class: 'item-card' }, [
-      el('span', { class: 'item-name', text: `${it.name} ×${it.count}` }),
-      el('div', { class: 'item-meta', text: it.desc }),
-      el('div', { class: 'row' }, [
-        it.kind === 'consumable' ? el('button', { text: '사용', onclick: () => itemAction('inventory:use', { code: it.code }, again) }) : null,
-        el('button', { class: 'danger', text: '1개 버리기', onclick: () => itemAction('inventory:discard', { code: it.code }, again, `${it.name} 1개를 버릴까요?`) }),
+  function bagList(inv) {
+    return [
+      ...inv.stacks.map((it) => ({ key: `s:${it.code}`, it, count: it.count })),
+      ...inv.equipment.filter((e) => !e.equipped).map((it) => ({ key: `e:${it.id}`, it, count: 1 })),
+    ];
+  }
+
+  function renderInventory(inv, selKey) {
+    const list = bagList(inv);
+    const sel = list.find((x) => x.key === selKey) || list[0];
+    const again = (key) => (res) => renderInventory(res, key);
+    let detail = el('p', { class: 'muted', text: '아이템을 누르면 여기에 설명이 나와요.' });
+    if (sel) {
+      const it = sel.it;
+      const actions = [];
+      if (it.kind === 'consumable') actions.push(actBtn('사용', () => itemAction('inventory:use', { code: it.code }, again(sel.key)), true));
+      if (it.kind === 'equipment') actions.push(actBtn(`분해 (파편 ${it.shards})`, () => itemAction('inventory:disassemble', { id: it.id }, again(), `${it.name}을(를) 분해할까요? 되돌릴 수 없습니다.`)));
+      actions.push(actBtn('버리기', () => (it.kind === 'equipment'
+        ? itemAction('inventory:discard', { id: it.id }, again(), `${it.name}을(를) 버릴까요? 되돌릴 수 없습니다.`)
+        : itemAction('inventory:discard', { code: it.code }, again(sel.key), `${it.name} 1개를 버릴까요?`))));
+      if (state.battle) actions.length = 0;
+      detail = itemDetail(it, { priceLabel: '판매가', price: `${it.sellPrice ?? '-'} G${inv.priceShop ? ` (${inv.priceShop})` : ''}`, actions });
+    }
+    openModal(el('div', { class: 'inv-win' }, [
+      el('div', { class: 'inv-left' }, [detail]),
+      el('div', { class: 'inv-right' }, [
+        ornament('end'),
+        el('div', { class: 'cells-scroll' }, [cellGrid(list.map((x) => itemCell(x.it, { selected: x === sel, count: x.count, onclick: () => renderInventory(inv, x.key) })))]),
+        el('p', { class: 'bag-foot' }, [el('span', { text: `${inv.bag.used} / ${inv.bag.size}칸` }), el('span', {}, ['보유 골드 ', el('b', { text: `${inv.character.gold} G` })])]),
       ]),
-    ]);
-    const worn = inv.equipment.filter((e) => e.equipped);
-    const bag = inv.equipment.filter((e) => !e.equipped);
-    openModal(el('div', {}, [
-      el('h2', { text: '인벤토리' }),
-      el('p', { class: 'muted', text: `골드 ${inv.character.gold} G${state.battle ? ' · 전투 중에는 바꿀 수 없다' : ''}` }),
-      el('p', { class: 'inv-message', text: message || '' }),
-      el('h3', { text: '장착 중' }),
-      ...Object.keys(SLOT_NAMES).map((slot) => {
-        const it = worn.find((e) => e.slot === slot);
-        return it ? equipCard(it) : el('div', { class: 'item-card muted', text: `${SLOT_NAMES[slot]}: 비어 있음` });
-      }),
-      el('h3', { text: `장비 (${bag.length})` }),
-      ...(bag.length ? bag.map(equipCard) : [el('p', { class: 'muted', text: '가방에 장비가 없다.' })]),
-      el('h3', { text: '소지품' }),
-      ...(inv.stacks.length ? inv.stacks.map(stackCard) : [el('p', { class: 'muted', text: '아무것도 없다.' })]),
-    ]));
+    ]), 'pop-inv');
   }
 
-  async function openShop(tab, message) {
+  // ---------- 장비 창 ----------
+  // 왼쪽: 지금 낀 장비 6칸 + 고른 장비 설명 / 오른쪽: 가방 속 장비만 (같은 장비도 한 칸씩)
+  async function openEquipment(sel) {
+    const res = await request('inventory:list');
+    if (res.error) return toast(res.error);
+    renderEquipment(res, sel);
+  }
+
+  function renderEquipment(inv, sel) {
+    const c = inv.character;
+    const worn = c.equipment;
+    const bag = inv.equipment.filter((e) => !e.equipped);
+    const pick = sel && (sel.slot ? worn[sel.slot] && { it: worn[sel.slot], slot: sel.slot } : bag.find((e) => e.id === sel.id) && { it: bag.find((e) => e.id === sel.id) });
+    const chosen = pick || (Object.entries(worn).find(([, v]) => v) ? { it: Object.entries(worn).find(([, v]) => v)[1], slot: Object.entries(worn).find(([, v]) => v)[0] } : null);
+    const again = (next) => (res) => renderEquipment(res, next);
+    const slotCells = c.slots.map((sl) => {
+      const it = worn[sl.id];
+      if (!it) return el('span', { class: 'cell big empty', title: `${sl.name} (빈 칸)`, 'aria-label': `${sl.name} (빈 칸)` });
+      const b = itemCell(it, { selected: chosen && chosen.slot === sl.id, onclick: () => renderEquipment(inv, { slot: sl.id }) });
+      b.classList.add('big');
+      b.title = `${sl.name}: ${it.name}`;
+      return b;
+    });
+    let detail = el('p', { class: 'muted', text: '장비를 누르면 여기에 설명이 나와요.' });
+    if (chosen) {
+      const it = chosen.it;
+      let action;
+      if (chosen.slot) {
+        action = actBtn('벗기', () => itemAction('inventory:unequip', { id: it.id }, again({ id: it.id })));
+      } else {
+        // 같은 종류 칸(장신구 · 장신구 2)이 다 차 있으면 바꿔 끼기
+        const fits = c.slots.filter((sl) => sl.id === it.kindSlot || sl.id === `${it.kindSlot}2`);
+        const full = fits.every((sl) => worn[sl.id]);
+        action = actBtn(full ? '바꿔 끼기' : '장착', () => itemAction('inventory:equip', { id: it.id }, again({ slot: null, id: null })), true);
+      }
+      detail = el('div', { class: 'edetail' }, [
+        el('p', { class: 'dname', text: it.name }),
+        el('p', { class: 'dsub', style: `color:${it.color}`, text: `${it.gradeName} · ${it.slotName}` }),
+        el('p', { class: 'ddesc', text: it.desc }),
+        el('p', { class: 'dstats', text: statText(it.stats) }),
+        state.battle ? null : el('div', { class: 'dactions' }, [action]),
+      ]);
+    }
+    openModal(el('div', { class: 'inv-win' }, [
+      el('div', { class: 'eq-left' }, [
+        el('div', { class: 'eq-slots' }, [el('h2', { class: 'eq-title', text: '장비' }), el('div', { class: 'slot-grid' }, slotCells)]),
+        el('div', { class: 'eq-detail' }, [detail]),
+      ]),
+      el('div', { class: 'inv-right' }, [
+        ornament('end'),
+        el('div', { class: 'cells-scroll' }, [cellGrid(bag.map((it) => itemCell(it, { selected: chosen && !chosen.slot && chosen.it.id === it.id, onclick: () => renderEquipment(inv, { id: it.id }) })), 20)]),
+        el('p', { class: 'bag-foot' }, [el('span', { text: `가방 속 장비 ${bag.length}개 · 같은 장비도 한 칸씩` })]),
+      ]),
+    ]), 'pop-inv');
+  }
+
+  // ---------- 상점 창 ----------
+  // 왼쪽: 내 가방 / 가운데: 고른 아이템 설명 + 구매·판매 / 오른쪽: 상점 물건. 안내 문구는 띄우지 않는다.
+  async function openShop(sel) {
     const res = await request('shop:view');
     if (res.error) return toast(res.error);
-    renderShop(res, tab, message);
+    renderShop(res, sel || { side: 'shop', key: res.goods[0]?.code }, 1);
   }
 
-  function renderShop(shop, tab, message) {
-    const again = (_res, msg) => openShop(tab, msg);
-    const tabs = el('div', { class: 'tabs' }, [
-      el('button', { class: tab === 'buy' ? '' : 'off', text: '구매', onclick: () => renderShop(shop, 'buy') }),
-      el('button', { class: tab === 'sell' ? '' : 'off', text: '판매', onclick: () => renderShop(shop, 'sell') }),
-    ]);
-    let body;
-    if (tab === 'buy') {
-      body = shop.goods.map((g) => el('div', { class: 'item-card' }, [
-        itemName(g),
-        el('span', { class: 'muted', text: `  ${g.price} G` }),
-        el('div', { class: 'item-meta', text: g.stats ? `${g.slotName} · ${statText(g.stats)}` : g.desc }),
-        el('div', { class: 'row' }, [
-          el('button', { text: '1개 구매', onclick: () => itemAction('shop:buy', { code: g.code }, again) }),
-          g.kind === 'consumable' ? el('button', { class: 'secondary', text: `5개 (${g.price * 5} G)`, onclick: () => itemAction('shop:buy', { code: g.code, count: 5 }, again) }) : null,
-        ]),
-      ]));
-    } else {
-      const sellEquip = shop.equipment.filter((e) => !e.equipped).map((it) => el('div', { class: 'item-card' }, [
-        itemName(it),
-        el('span', { class: 'muted', text: `  판매가 ${it.sellPrice} G` }),
-        el('div', { class: 'item-meta', text: `${it.slotName} · ${statText(it.stats)}` }),
-        el('div', { class: 'row' }, [el('button', {
-          text: '판매', onclick: () => itemAction('shop:sell', { id: it.id }, again, `${it.name}을(를) ${it.sellPrice} G에 팔까요?`),
-        })]),
-      ]));
-      const sellStacks = shop.stacks.map((it) => el('div', { class: 'item-card' }, [
-        el('span', { class: 'item-name', text: `${it.name} ×${it.count}` }),
-        el('span', { class: 'muted', text: `  개당 ${it.sellPrice} G` }),
-        el('div', { class: 'row' }, [el('button', { text: '1개 판매', onclick: () => itemAction('shop:sell', { code: it.code }, again) })]),
-      ]));
-      body = [...sellEquip, ...sellStacks];
-      if (!body.length) body.push(el('p', { class: 'muted', text: '팔 수 있는 물건이 없다. (장착 중인 장비는 벗어야 팔 수 있다)' }));
+  function renderShop(shop, sel, qty) {
+    const mine = bagList(shop);
+    const goods = shop.goods.map((g) => ({ key: g.code, it: g }));
+    const chosen = sel.side === 'bag' ? mine.find((x) => x.key === sel.key) : goods.find((x) => x.key === sel.key);
+    let center = el('p', { class: 'muted', text: '아이템을 누르면 여기에 설명이 나와요.' });
+    if (chosen) {
+      const it = chosen.it;
+      const buying = sel.side === 'shop';
+      const stack = it.kind !== 'equipment';
+      const max = buying ? 20 : (chosen.count || 1);
+      const n = stack ? Math.min(qty, max) : 1;
+      const unit = buying ? it.price : it.sellPrice;
+      const total = unit * n;
+      const tooPoor = buying && total > shop.character.gold;
+      const step = stack ? el('div', { class: 'qty', role: 'group', 'aria-label': '개수' }, [
+        el('button', { type: 'button', 'aria-label': '하나 줄이기', text: '−', onclick: () => renderShop(shop, sel, Math.max(1, n - 1)) }),
+        el('b', { text: `${n}개` }),
+        el('button', { type: 'button', 'aria-label': '하나 늘리기', text: '+', onclick: () => renderShop(shop, sel, Math.min(max, n + 1)) }),
+      ]) : null;
+      const deal = actBtn(`${buying ? '구매' : '판매'} · ${total} G`, async () => {
+        if (buying) {
+          const res = await request('shop:buy', { code: it.code, count: n });
+          if (res.error) return toast(res.error);
+        } else {
+          // 판매는 한 번에 하나씩 서버에 보낸다.
+          for (let i = 0; i < n; i++) {
+            const res = await request('shop:sell', it.kind === 'equipment' ? { id: it.id } : { code: it.code });
+            if (res.error) { toast(res.error); break; }
+          }
+        }
+        const next = await request('shop:view');
+        if (next.error) return toast(next.error);
+        state.character = next.character;
+        renderStatus();
+        const still = sel.side === 'shop' || bagList(next).some((x) => x.key === sel.key);
+        renderShop(next, still ? sel : { side: 'shop', key: next.goods[0]?.code }, 1);
+      }, true);
+      if (tooPoor) deal.disabled = true;
+      center = itemDetail(it, {
+        priceLabel: buying ? '구매가' : '판매가',
+        price: buying ? `${it.price} G` : `${it.sellPrice} G (가지고 있는 수 ${chosen.count || 1}개)`,
+        extra: step,
+        actions: [deal],
+      });
     }
-    openModal(el('div', {}, [
-      el('h2', { text: shop.name }),
-      el('p', { class: 'muted', text: `가진 골드 ${shop.character.gold} G · 팔 때는 사는 값보다 훨씬 싸게 쳐준다.` }),
-      el('p', { class: 'inv-message', text: message || '' }),
-      tabs,
-      ...body,
-    ]));
+    openModal(el('div', { class: 'shop-win' }, [
+      el('div', { class: 'shop-col' }, [
+        el('div', { class: 'shop-head' }, [el('h2', { text: '내 가방' }), el('span', { class: 'line' })]),
+        el('div', { class: 'cells-scroll' }, [cellGrid(mine.map((x) => itemCell(x.it, { selected: sel.side === 'bag' && sel.key === x.key, count: x.count, onclick: () => renderShop(shop, { side: 'bag', key: x.key }, 1) })))]),
+        el('p', { class: 'bag-foot' }, [el('span', { text: `${shop.bag.used} / ${shop.bag.size}칸` }), el('span', {}, ['보유 골드 ', el('b', { text: `${shop.character.gold} G` })])]),
+      ]),
+      el('div', { class: 'shop-center' }, [center]),
+      el('div', { class: 'shop-col' }, [
+        el('div', { class: 'shop-head end' }, [el('span', { class: 'line' }), el('h2', { class: 'shop-name', text: shop.name })]),
+        el('div', { class: 'cells-scroll' }, [cellGrid(goods.map((x) => itemCell(x.it, { selected: sel.side === 'shop' && sel.key === x.key, onclick: () => renderShop(shop, { side: 'shop', key: x.key }, 1) })), 10)]),
+        el('p', { class: 'bag-foot' }, [el('span', { text: '상점은 일반 등급 장비만 팔아요.' })]),
+      ]),
+    ]), 'pop-shop');
+  }
+
+  // ---------- OC 프로필 창 ----------
+  // 보기: 가로 카드 (왼쪽 반신 컷인 / 가운데 이름 · 칭호 · Lv · 설정 글 / 오른쪽 관계 · 장비 6칸)
+  async function openProfile(id) {
+    const res = await request('profile:view', { id });
+    if (res.error) return toast(res.error);
+    renderProfile(res.profile);
+  }
+
+  function renderProfile(pf) {
+    const el0 = (state.options.elements.find((e) => e.id === pf.elementId)) || {};
+    const tip = el('div', { class: 'eq-tip hidden', role: 'tooltip' });
+    const showTip = (it) => {
+      tip.replaceChildren(el('b', { style: `color:${it.color}`, text: it.name }), el('span', { text: `${it.slotName} · ${it.gradeName}` }), el('span', { class: 'tstats', text: statText(it.stats) }));
+      tip.style.borderColor = it.color;
+      tip.classList.remove('hidden');
+    };
+    const hideTip = () => tip.classList.add('hidden');
+    const equipCells = pf.slots.map((sl) => {
+      const it = pf.equipment[sl.id];
+      if (!it) return el('span', { class: 'cell empty', title: `${sl.name} (빈 칸)`, 'aria-label': `${sl.name} (빈 칸)` });
+      const b = itemCell(it, { onclick: () => showTip(it) });
+      b.addEventListener('mouseenter', () => showTip(it));
+      b.addEventListener('mouseleave', hideTip);
+      b.addEventListener('focus', () => showTip(it));
+      b.addEventListener('blur', hideTip);
+      return b;
+    });
+    const rels = pf.relations || [];
+    const relRows = Array.from({ length: Math.max(5, rels.length) }, (_, i) => rels[i] || null).map((r) => (r
+      ? el('button', { type: 'button', class: 'rel-row', title: `${r.name}의 프로필 보기`, onclick: () => openProfile(r.id) }, [el('b', { text: r.name }), el('span', { text: r.relation })])
+      : el('span', { class: 'rel-row empty' })));
+    const buttons = pf.mine
+      ? [actBtn('프로필 편집', () => openProfileEdit(), true)]
+      : profileSocialButtons(pf);
+    openModal(el('div', { class: 'pcard' }, [
+      el('div', { class: 'pc-photo', role: 'img', 'aria-label': `${pf.name} 컷인 사진` }, [
+        photo(pf.cutinUrl, 'half'),
+        pf.cutinUrl ? null : el('span', { class: 'pc-default', text: '기본 프사 사용 중' }),
+      ]),
+      el('div', { class: 'pc-head' }, [
+        ornament('pc-orn'),
+        el('div', { class: 'pc-namebox' }, [
+          el('h2', { class: 'pc-name', text: pf.name }),
+          el('div', {}, [
+            el('span', { class: 'pc-title', text: pf.title ? `[${pf.title}]` : '' }),
+            el('div', { class: 'pc-line' }, [
+              el('span', { class: 'pc-lv', text: `Lv.${pf.level}` }),
+              el('span', { class: 'pc-el', role: 'img', 'aria-label': `${pf.element} 속성`, title: `${pf.element} 속성`, style: `border-color:${el0.color || 'var(--line)'}`, text: el0.icon || '◆' }),
+              el('span', { class: 'pc-cls', text: pf.cls }),
+              el('span', { class: 'pc-gender', text: `· ${pf.gender}` }),
+            ]),
+          ]),
+        ]),
+      ]),
+      el('div', { class: 'pc-body' }, [
+        el('div', { class: 'pc-text', text: pf.text || (pf.mine ? '아직 OC 설정이 비어 있어요. [프로필 편집]에서 적어 보세요.' : '아직 OC 설정이 없어요.') }),
+        el('div', { class: 'pc-buttons' }, buttons),
+      ]),
+      el('div', { class: 'pc-side' }, [
+        el('div', { class: 'rel-list', 'aria-label': '관계' }, relRows),
+        el('div', { class: 'pc-equip' }, [el('h3', { text: '장비' }), el('div', { class: 'pc-eq-grid' }, equipCells), tip]),
+      ]),
+    ]), 'pop-profile');
+  }
+  // 친구 · 관계 버튼은 친구 기능과 함께 채운다.
+  let profileSocialButtons = () => [];
+
+  // 편집: 왼쪽 탭(기본 정보 · 사진 · OC 설정 · 관계 · 대사 프리셋), 아래 [취소] [저장]
+  function openProfileEdit(tab = 'basic', relPreselect = null) {
+    const c = state.character;
+    const rules = state.options.profile;
+    const d = {
+      name: c.name, nameOk: true, nameMsg: '서버 안의 다른 캐릭터와 같은 이름은 쓸 수 없어요.',
+      title: c.title, gender: c.gender, text: c.profileText,
+      photoMode: c.avatarUrl && c.cutinUrl ? 'custom' : 'default', avatar: c.avatarUrl, cutin: c.cutinUrl,
+      lines: Object.fromEntries(rules.lineSituations.map((s) => [s.id, [...(c.customLines[s.id] || [])]])),
+    };
+    const content = el('div', { class: 'pedit-body' });
+    const status = el('span', { class: 'pedit-status', role: 'status' });
+    const saveBtn = actBtn('저장', save, true);
+    const tabs = [['basic', '기본 정보'], ['photo', '사진'], ['text', 'OC 설정'], ['rel', '관계'], ['lines', '대사 프리셋']];
+    const nav = el('nav', { class: 'pedit-tabs', 'aria-label': '편집 항목' });
+
+    function blockers() {
+      if (d.photoMode === 'custom' && !(d.avatar && d.cutin)) return '사진 탭: 커스텀 사진 두 장을 모두 올려야 해요.';
+      if (d.name.trim() !== c.name && !d.nameOk) return '기본 정보 탭: 이름 중복 확인이 필요해요.';
+      return '';
+    }
+    function refreshFooter() {
+      const b = blockers();
+      status.textContent = b;
+      saveBtn.disabled = Boolean(b);
+    }
+    function draw() {
+      nav.replaceChildren(...tabs.map(([k, label]) => el('button', { type: 'button', class: k === tab ? 'on' : '', 'aria-current': k === tab ? 'page' : 'false', text: label, onclick: () => { tab = k; draw(); } })));
+      content.replaceChildren(...(PANELS[tab]() || []));
+      refreshFooter();
+    }
+    const field = (label, control, help) => el('div', { class: 'pfield' }, [el('label', { text: label }), control, help ? el('p', { class: 'phelp', text: help }) : null]);
+    const PANELS = {
+      basic() {
+        const msg = el('p', { class: `phelp ${d.nameOk === false ? 'bad' : ''}`, role: 'status', text: d.nameMsg });
+        const input = el('input', { value: d.name, maxlength: '12', autocomplete: 'off', 'aria-label': '이름' });
+        input.addEventListener('input', () => {
+          d.name = input.value;
+          d.nameOk = d.name.trim() === c.name;
+          d.nameMsg = d.nameOk ? '서버 안의 다른 캐릭터와 같은 이름은 쓸 수 없어요.' : '이름을 바꾸려면 중복 확인을 해 주세요.';
+          msg.textContent = d.nameMsg;
+          msg.className = 'phelp';
+          refreshFooter();
+        });
+        const check = actBtn('중복 확인', async () => {
+          const res = await request('profile:checkName', { name: d.name.trim() });
+          d.nameOk = Boolean(res.available) || d.name.trim() === c.name;
+          d.nameMsg = res.error || (d.name.trim() === c.name ? '지금 쓰는 이름이에요.' : res.available ? '쓸 수 있는 이름이에요.' : res.reason);
+          msg.textContent = d.nameMsg;
+          msg.className = `phelp ${d.nameOk ? 'good' : 'bad'}`;
+          refreshFooter();
+        });
+        const title = el('select', { 'aria-label': '칭호' }, c.titles.map((t) => el('option', { value: t, text: t })));
+        title.value = d.title;
+        title.addEventListener('change', () => { d.title = title.value; });
+        const genders = el('div', { class: 'ptoggle', role: 'group', 'aria-label': '성별' }, state.options.genders.map((g) => el('button', {
+          type: 'button', class: d.gender === g.id ? 'on' : '', 'aria-pressed': String(d.gender === g.id), text: g.name, onclick: () => { d.gender = g.id; draw(); },
+        })));
+        return [
+          el('div', { class: 'pfield' }, [el('label', { text: '이름' }), el('div', { class: 'prow' }, [input, check]), msg]),
+          field('칭호', title, '얻은 칭호 중에서 골라 달 수 있어요.'),
+          field('성별', genders),
+        ];
+      },
+      photo() {
+        const modes = el('div', { class: 'pmodes', role: 'radiogroup', 'aria-label': '프로필 사진 종류' }, [
+          ['default', '기본 프사 쓰기', '게임에 있는 기본 그림을 써요.'],
+          ['custom', '커스텀 사진 쓰기', '사진 두 장을 직접 올려요.'],
+        ].map(([k, label, desc]) => el('button', { type: 'button', role: 'radio', 'aria-checked': String(d.photoMode === k), class: d.photoMode === k ? 'on' : '', onclick: () => { d.photoMode = k; draw(); } }, [el('b', { text: label }), el('span', { text: desc })])));
+        if (d.photoMode !== 'custom') return [modes];
+        const slot = (key, label, desc, w, h, round) => {
+          const pick = el('input', { type: 'file', accept: 'image/*', class: 'hidden' });
+          pick.addEventListener('change', async () => {
+            const file = pick.files[0];
+            if (!file) return;
+            try {
+              d[key] = await resizeImage(file, w * 2, h * 2);
+              draw();
+            } catch {
+              toast('사진을 읽지 못했어요. 다른 사진을 골라 주세요.');
+            }
+          });
+          return el('div', { class: 'pslot', style: `width:${w}px` }, [
+            el('b', { text: label }),
+            el('div', { class: 'pslot-box', role: 'img', 'aria-label': `${label} 미리보기`, style: `width:${w}px;height:${h}px;border-radius:${round}` }, [d[key] ? el('img', { src: d[key], alt: '' }) : el('span', { text: '아직 없음' })]),
+            el('span', { class: 'phelp', text: desc }),
+            actBtn(d[key] ? '다른 사진으로 바꾸기' : '사진 고르기', () => pick.click()),
+            pick,
+          ]);
+        };
+        const both = d.avatar && d.cutin;
+        return [modes, el('div', { class: 'pslots' }, [
+          slot('avatar', '① 프로필 사진 (정사각형)', '프로필 카드, 채팅, 3~4명 전투에 쓰여요.', 160, 160, '50%'),
+          slot('cutin', '② 컷인 사진 (세로로 긴 반신)', '1~2명 전투와 프로필 창에 크게 보여요. 세로 1 : 2.', 140, 280, '12px'),
+        ]), el('p', { class: `phelp ${both ? 'good' : 'warn'}`, text: both ? '두 장 모두 올렸어요.' : '커스텀 사진은 두 장을 모두 올려야 저장할 수 있어요.' })];
+      },
+      text() {
+        const area = el('textarea', { maxlength: String(rules.textMax), 'aria-label': 'OC 설정' });
+        area.value = d.text;
+        const count = el('p', { class: 'phelp right', text: `${d.text.length} / ${rules.textMax}자` });
+        area.addEventListener('input', () => { d.text = area.value; count.textContent = `${d.text.length} / ${rules.textMax}자`; });
+        return [el('label', { class: 'plabel', text: 'OC 설정 — 외형, 성격, 과거, 소개 등 자유롭게' }), area, count];
+      },
+      rel() {
+        return profileRelationPanel(relPreselect);
+      },
+      lines() {
+        return [
+          el('p', { class: 'phelp', text: `전투 중 그 상황이 되면 내 말풍선에 자동으로 떠요. 상황마다 최대 ${rules.linesPerSituation}개, 여러 개면 그중 하나가 무작위로 나와요. 비워 두면 말없이 지나가요.` }),
+          ...rules.lineSituations.map((sit) => {
+            const list = d.lines[sit.id];
+            return el('div', { class: 'pline' }, [
+              el('div', { class: 'pline-head' }, [el('b', { text: sit.name }), el('small', { text: `${list.length} / ${rules.linesPerSituation}` })]),
+              el('div', { class: 'pline-list' }, [
+                ...list.map((text, i) => {
+                  const inp = el('input', { value: text, maxlength: String(rules.lineMax), autocomplete: 'off', 'aria-label': `${sit.name} 대사` });
+                  inp.addEventListener('input', () => { list[i] = inp.value; });
+                  return el('div', { class: 'prow' }, [inp, el('button', { type: 'button', class: 'pbtn x', 'aria-label': '이 대사 지우기', text: '×', onclick: () => { list.splice(i, 1); draw(); } })]);
+                }),
+                list.length < rules.linesPerSituation ? el('button', { type: 'button', class: 'padd', text: '+ 대사 추가', onclick: () => { list.push(''); draw(); } }) : null,
+              ]),
+            ]);
+          }),
+        ];
+      },
+    };
+
+    async function save() {
+      if (blockers()) return;
+      const payload = {
+        name: d.name.trim(), title: d.title, gender: d.gender, text: d.text,
+        photo: d.photoMode === 'custom' ? { avatar: d.avatar, cutin: d.cutin } : 'default',
+        lines: Object.fromEntries(Object.entries(d.lines).map(([k, l]) => [k, l.map((x) => x.trim()).filter(Boolean)])),
+      };
+      saveBtn.disabled = true;
+      const res = await request('profile:update', payload);
+      if (res.error) {
+        saveBtn.disabled = false;
+        return toast(res.error);
+      }
+      state.character = res.character;
+      renderProfileCard();
+      openProfile();
+    }
+
+    openModal(el('div', { class: 'pedit' }, [
+      el('header', { class: 'pedit-head' }, [el('h2', { text: '프로필 편집' })]),
+      el('div', { class: 'pedit-main' }, [nav, content]),
+      el('footer', { class: 'pedit-foot' }, [status, actBtn('취소', () => openProfile()), saveBtn]),
+    ]), 'pop-pedit');
+    draw();
+  }
+  let profileRelationPanel = () => [];
+
+  // 사진을 브라우저에서 줄여(가운데를 잘라) JPEG 글자로 바꾼다. 서버에는 이 작은 그림만 간다.
+  function resizeImage(file, w, h) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const scale = Math.max(w / img.width, h / img.height);
+          const sw = w / scale;
+          const sh = h / scale;
+          // 가로는 가운데, 세로는 위(얼굴) 기준으로 자른다.
+          canvas.getContext('2d').drawImage(img, (img.width - sw) / 2, 0, sw, sh, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // ---------- 친구 창 ----------
+  // 파티 창과 같은 모양: 받은 신청(맨 위) · 친구 목록(접속 중 → 전투 중 → 오프라인), 우클릭 [프로필 보기] [친구 삭제], [+ 친구 추가]
+  const PRESENCE = { online: ['접속 중', '#7fd49a'], battle: ['전투 중', '#ff5c6c'], offline: ['오프라인', 'var(--muted)'] };
+  // 받침 있으면 a, 없으면 b (예: 릴리 + 와/과)
+  const josa = (word, a, b) => {
+    const code = word.charCodeAt(word.length - 1) - 0xac00;
+    return code >= 0 && code <= 11171 && code % 28 ? a : b;
+  };
+  function memberAvatar(p) {
+    const box = el('span', { class: `mava ${p.status === 'offline' ? 'off' : ''}`, 'aria-hidden': 'true' });
+    if (p.avatarUrl) box.append(el('img', { src: p.avatarUrl, alt: '' }));
+    else box.textContent = p.name.slice(0, 1);
+    return box;
+  }
+  function memberRow(p, { cls = '', menu = [], extra = [] } = {}) {
+    const [label, color] = PRESENCE[p.status] || PRESENCE.offline;
+    const row = el('li', { class: `mrow ${cls}`, title: menu.length ? '우클릭: 메뉴' : '' }, [
+      memberAvatar(p),
+      el('span', { class: 'minfo' }, [
+        el('b', { class: 'mname', text: p.name }),
+        ...(p.badge ? [p.badge] : []),
+        el('span', { class: 'msub', text: `Lv.${p.level} · ${p.cls} · 📍 ${p.where}` }),
+      ]),
+      ...extra,
+      p.status ? el('span', { class: 'mstate', style: `color:${color}`, text: `● ${label}` }) : null,
+    ]);
+    if (menu.length) {
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        openRowMenu(row, menu);
+      });
+    }
+    return row;
+  }
+  // 우클릭 메뉴: 다른 곳을 누르면 사라진다.
+  function openRowMenu(row, items) {
+    document.querySelectorAll('.row-menu').forEach((m) => m.remove());
+    const menu = el('div', { class: 'row-menu', role: 'menu' }, items.map(([label, fn, danger]) => el('button', {
+      type: 'button', role: 'menuitem', class: danger ? 'danger' : '', text: label, onclick: () => { menu.remove(); fn(); },
+    })));
+    row.append(menu);
+    const close = (e) => {
+      if (menu.contains(e.target)) return;
+      menu.remove();
+      document.removeEventListener('mousedown', close, true);
+    };
+    setTimeout(() => document.addEventListener('mousedown', close, true));
+  }
+  // 창 안에 뜨는 작은 이름 입력 팝업 (친구 추가 · 파티 초대)
+  function nameAsk(win, { label, placeholder, submit, button }) {
+    const msg = el('p', { class: 'ask-msg', role: 'status' });
+    const input = el('input', { placeholder, autocomplete: 'off', 'aria-label': label });
+    const box = el('div', { class: 'ask-wrap' }, [el('form', { class: 'ask', role: 'dialog', 'aria-label': label }, [
+      el('button', { type: 'button', class: 'popup-close', 'aria-label': '닫기', text: '×', onclick: () => box.remove() }),
+      el('label', { text: label }), input, msg,
+      el('button', { type: 'submit', class: 'pbtn main', text: button }),
+    ])]);
+    box.firstChild.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const error = await submit(input.value.trim());
+      if (error) msg.textContent = error;
+      else box.remove();
+    });
+    win.append(box);
+    input.focus();
+  }
+
+  const ORDER = { online: 0, battle: 1, offline: 2 };
+  async function openFriends() {
+    const res = await request('friends:list');
+    if (res.error) return toast(res.error);
+    renderFriends(res);
+  }
+  function renderFriends(f) {
+    const again = (res) => { if (res.error) return toast(res.error); renderFriends(res); };
+    const friends = [...f.friends].sort((a, b) => ORDER[a.status] - ORDER[b.status]);
+    const rows = [
+      ...f.incoming.map((q) => memberRow({ ...q, status: null }, {
+        cls: 'request',
+        extra: [
+          el('button', { type: 'button', class: 'pbtn main small', text: '수락', onclick: async () => again(await request('links:answer', { linkId: q.linkId, accept: true })) }),
+          el('button', { type: 'button', class: 'pbtn small', text: '거절', onclick: async () => again(await request('links:answer', { linkId: q.linkId, accept: false })) }),
+        ],
+      })),
+      ...friends.map((p) => memberRow(p, { menu: [
+        ['프로필 보기', () => openProfile(p.id)],
+        ['친구 삭제', async () => { if (confirm(`${p.name}을(를) 친구에서 삭제할까요? 둘 사이의 관계도 같이 없어져요.`)) again(await request('links:remove', { linkId: p.linkId })); }, true],
+      ] })),
+    ];
+    for (const r of rows.slice(0, f.incoming.length)) r.querySelector('.msub').textContent = '친구 신청을 보냈어요';
+    const online = friends.filter((p) => p.status !== 'offline').length;
+    const win = el('div', { class: 'list-win' }, [
+      el('header', {}, [listTabs('friends'), el('div', { class: 'phead' }, [el('h2', { class: 'ptitle', text: '친구' }), el('span', { class: 'who', text: `접속 중 ${online} / ${friends.length}명` })]), ornament()]),
+      el('ul', { class: 'mlist', 'aria-label': '친구 목록' }, rows.length ? rows : [el('li', { class: 'muted empty-note', text: '아직 친구가 없어요. [+ 친구 추가]로 신청해 보세요.' })]),
+      el('footer', { class: 'list-foot' }, [
+        f.sent.length ? el('span', { class: 'muted', text: `보낸 신청: ${f.sent.map((s) => s.name).join(', ')}` }) : el('span'),
+        el('button', { type: 'button', class: 'pbtn small', text: '+ 친구 추가', onclick: () => nameAsk(win, {
+          label: '친구로 추가할 캐릭터 이름', placeholder: '예: 카논', button: '친구 신청 보내기',
+          submit: async (name) => {
+            if (!name) return '이름을 적어 주세요.';
+            const res = await request('friends:request', { name });
+            if (res.error) return res.error;
+            renderFriends(res);
+            return null;
+          },
+        }) }),
+      ]),
+    ]);
+    openModal(win, 'pop-list');
+  }
+  socket.on('links:changed', () => {
+    // 친구 창이 열려 있으면 새로 고친다.
+    if (!$('modal').classList.contains('hidden') && $('modal-panel').classList.contains('pop-list') && $('modal-content').querySelector('[aria-label="친구 목록"]')) openFriends();
+  });
+
+  // 다른 사람 프로필의 버튼: [친구 신청] (보냄 / 수락) · [관계 신청] (친구일 때만)
+  profileSocialButtons = (pf) => {
+    const reopen = () => openProfile(pf.id);
+    const friendBtn = {
+      none: actBtn('친구 신청', async () => { const r = await request('friends:request', { name: pf.name }); if (r.error) toast(r.error); reopen(); }, true),
+      sent: actBtn('친구 신청 보냄', () => {}),
+      incoming: actBtn('친구 수락', async () => { const r = await request('links:answer', { linkId: pf.friendLinkId, accept: true }); if (r.error) toast(r.error); reopen(); }, true),
+      friend: actBtn('친구', () => {}),
+    }[pf.friend || 'none'];
+    if (pf.friend === 'sent' || pf.friend === 'friend') friendBtn.disabled = true;
+    const rel = actBtn('관계 신청', () => openProfileEdit('rel', pf.id));
+    if (pf.friend !== 'friend') {
+      rel.disabled = true;
+      rel.title = '친구가 되어야 관계를 신청할 수 있어요';
+    }
+    return [friendBtn, rel];
+  };
+
+  // 프로필 편집의 [관계] 탭: 내 관계 목록 + 친구 목록에서 골라 신청
+  profileRelationPanel = (preselect) => {
+    const box = el('div', { class: 'rel-panel' }, [el('p', { class: 'phelp', text: '불러오는 중…' })]);
+    const me = state.character.name;
+    const sentence = (who, name) => `${me}${josa(me, '과', '와')} ${who}${josa(who, '은', '는')} ${name} 관계`;
+    const draw = (f) => {
+      const act = async (event, payload) => {
+        const res = await request(event, payload);
+        if (res.error) return toast(res.error);
+        draw(res);
+      };
+      const list = f.relations.map((r) => el('div', { class: 'rel-item' }, [
+        el('span', { class: 'rel-text', text: sentence(r.name, r.relation) }),
+        el('span', { class: `rel-badge ${r.status === 'accepted' ? 'on' : ''}`, text: r.status === 'accepted' ? '성립' : r.incoming ? '받은 신청' : '수락 기다리는 중' }),
+        r.incoming ? el('button', { type: 'button', class: 'pbtn main small', text: '수락', onclick: () => act('links:answer', { linkId: r.linkId, accept: true }) }) : null,
+        el('button', { type: 'button', class: 'pbtn small', text: r.status === 'accepted' ? '해제' : r.incoming ? '거절' : '신청 취소', onclick: () => (r.incoming ? act('links:answer', { linkId: r.linkId, accept: false }) : act('links:remove', { linkId: r.linkId })) }),
+      ]));
+      const related = new Set(f.relations.map((r) => r.id));
+      const candidates = f.friends.filter((p) => !related.has(p.id));
+      const pick = el('select', { 'aria-label': '친구 고르기' }, candidates.map((p) => el('option', { value: String(p.id), text: p.name })));
+      if (preselect && candidates.some((p) => p.id === preselect)) pick.value = String(preselect);
+      const relName = el('input', { placeholder: '관계 이름 (예: 소꿉친구, 라이벌)', maxlength: String(state.options.profile.relationMax), autocomplete: 'off', 'aria-label': '관계 이름' });
+      const preview = el('b');
+      const updatePreview = () => {
+        const who = candidates.find((p) => String(p.id) === pick.value);
+        preview.textContent = who ? sentence(who.name, relName.value.trim() || '○○') : '-';
+      };
+      pick.addEventListener('change', updatePreview);
+      relName.addEventListener('input', updatePreview);
+      updatePreview();
+      const form = el('form', { class: 'rel-form' }, [
+        el('h3', { text: '관계 신청하기' }),
+        candidates.length
+          ? el('div', { class: 'prow' }, [pick, relName, el('button', { type: 'submit', class: 'pbtn main', text: '신청' })])
+          : el('p', { class: 'phelp', text: '관계를 신청할 수 있는 친구가 없어요. 먼저 친구를 추가해 보세요.' }),
+        candidates.length ? el('p', { class: 'phelp' }, ['미리보기: ', preview]) : null,
+        el('p', { class: 'phelp', text: '친구 목록에서만 고를 수 있어요. 상대가 수락하면 두 사람 프로필에 모두에게 보여요. 해제는 어느 쪽이든 언제든 할 수 있어요.' }),
+      ]);
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        act('relation:request', { id: Number(pick.value), name: relName.value.trim() });
+      });
+      box.replaceChildren(
+        el('div', { class: 'rel-mine' }, [el('h3', { text: '내 관계' }), ...(list.length ? list : [el('p', { class: 'phelp', text: '아직 관계가 없어요.' })])]),
+        form,
+      );
+    };
+    request('friends:list').then((res) => (res.error ? toast(res.error) : draw(res)));
+    return [box];
+  };
+
+  // ---------- 파티 창 · 필드 파티 정보 ----------
+  // 친구 · 파티는 같은 아이콘이라 창 위쪽 제목을 눌러 오간다.
+  const listTabs = (active) => el('div', { class: 'list-tabs', role: 'tablist' }, [
+    el('button', { type: 'button', role: 'tab', 'aria-selected': String(active === 'friends'), class: active === 'friends' ? 'on' : '', text: '친구', onclick: () => active !== 'friends' && openFriends() }),
+    el('button', { type: 'button', role: 'tab', 'aria-selected': String(active === 'party'), class: active === 'party' ? 'on' : '', text: '파티', onclick: () => active !== 'party' && openParty() }),
+  ]);
+
+  async function openParty() {
+    const res = await request('party:view');
+    if (res.error) return toast(res.error);
+    state.party = res.party;
+    renderParty();
+  }
+  const partyOpen = () => !$('modal').classList.contains('hidden') && $('modal-content').querySelector('[aria-label="파티 멤버"]');
+
+  function renderParty(renaming = false, note = '') {
+    const party = state.party;
+    const meId = state.character.id;
+    const amLeader = !party || party.leaderId === meId;
+    const set = (res) => {
+      if (res.error) return toast(res.error);
+      state.party = res.party;
+      renderPartyPanel();
+      renderParty();
+    };
+    // 이름 + (파티장만) 작은 설정 아이콘 → 그 자리에서 고치고 엔터나 [저장]
+    let title;
+    if (party && renaming) {
+      const input = el('input', { value: party.name, maxlength: '16', autocomplete: 'off', 'aria-label': '파티 이름' });
+      title = el('form', { class: 'pname-edit' }, [input, el('button', { type: 'submit', class: 'pbtn main small', text: '저장' })]);
+      title.addEventListener('submit', async (e) => { e.preventDefault(); set(await request('party:rename', { name: input.value })); });
+      setTimeout(() => input.focus());
+    } else {
+      title = el('div', { class: 'pname-view' }, [
+        el('h2', { class: 'ptitle', text: party ? party.name : '파티' }),
+        party && amLeader ? el('button', { type: 'button', class: 'gear', 'aria-label': '파티 이름 바꾸기', title: '파티 이름 바꾸기', onclick: () => renderParty(true) }, [icon(GEAR_PATH, 14)]) : null,
+      ]);
+    }
+    const rows = (party ? party.members : []).map((m) => {
+      const me = m.id === meId;
+      const menu = me ? [['파티 나가기', async () => set(await request('party:leave')), true]]
+        : amLeader ? [['파티장 위임', async () => set(await request('party:delegate', { id: m.id }))], ['추방', async () => set(await request('party:kick', { id: m.id })), true]] : [];
+      const row = memberRow({ ...m, badge: m.leader ? el('span', { class: 'mbadge', text: '👑 파티장' }) : null }, { cls: m.leader ? 'leader' : '', menu });
+      if (me) row.querySelector('.mname').classList.add('me');
+      return row;
+    });
+    const win = el('div', { class: 'list-win' }, [
+      el('header', {}, [listTabs('party'), el('div', { class: 'phead' }, [title, el('span', { class: 'who', text: party ? `${party.members.length} / ${party.max}명` : '' })]), ornament()]),
+      el('ul', { class: 'mlist', 'aria-label': '파티 멤버' }, rows.length ? rows : [el('li', { class: 'muted empty-note', text: '파티에 들어가 있지 않아요. [+ 초대]로 친구를 부르면 파티가 만들어져요.' })]),
+      el('footer', { class: 'list-foot' }, [
+        el('span', { class: 'muted', text: note || (party ? '멤버를 우클릭하면 메뉴가 떠요.' : '') }),
+        amLeader ? el('button', { type: 'button', class: 'pbtn small', text: '+ 초대', onclick: () => nameAsk(win, {
+          label: '초대할 캐릭터 이름', placeholder: '예: 유키', button: '초대 보내기',
+          submit: async (name) => {
+            if (!name) return '이름을 적어 주세요.';
+            const res = await request('party:invite', { name });
+            if (res.error) return res.error;
+            state.party = res.party;
+            renderPartyPanel();
+            renderParty(false, `${name}에게 초대를 보냈어요. 수락하면 파티에 들어와요.`);
+            return null;
+          },
+        }) }) : null,
+      ]),
+    ]);
+    openModal(win, 'pop-list');
+  }
+
+  socket.on('party:update', ({ party }) => {
+    state.party = party;
+    renderPartyPanel();
+    if (partyOpen()) renderParty();
+  });
+  // 초대를 받으면 바닥 글 상자에 선택지가 뜬다.
+  socket.on('party:invited', ({ partyId, from, name }) => {
+    const answer = (accept) => async () => {
+      const res = await request('party:respond', { partyId, accept });
+      if (res.error) toast(res.error);
+      else if (accept) { state.party = res.party; renderPartyPanel(); }
+      showCaption(accept && !res.error ? `[${name}]에 들어갔다.` : '파티 초대를 거절했다.', null, false);
+    };
+    showCaption(`${from}이(가) [${name}]에 초대했다.`, [{ label: '1. 들어간다', pick: answer(true) }, { label: '2. 거절한다', pick: answer(false) }]);
+  });
+
+  // 필드 왼쪽 위 (맵 이름 아래): 나 포함 파티원. 반투명 검정, 외곽선 없음.
+  function renderPartyPanel() {
+    const box = $('party-panel');
+    const party = state.party;
+    if (!party) return box.classList.add('hidden');
+    box.classList.remove('hidden');
+    box.replaceChildren(...party.members.map((m) => {
+      const ava = memberAvatar(m);
+      ava.classList.add('pp-ava');
+      return el('li', {}, [
+        ava,
+        el('span', { class: 'pp-info' }, [
+          el('span', { class: 'pp-top' }, [el('small', { text: `Lv.${m.level} ` }), el('b', { class: m.id === state.character?.id ? 'me' : '', text: m.name }), m.leader ? el('span', { 'aria-label': '파티장', text: ' 👑' }) : null]),
+          el('span', { class: 'pp-where', text: m.where }),
+        ]),
+      ]);
+    }));
   }
 
   for (const btn of document.querySelectorAll('[data-menu]')) {

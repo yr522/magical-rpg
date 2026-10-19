@@ -66,6 +66,8 @@ class Battle {
       level: row.level,
       mag: row.mag,
       avatarUrl: row.avatar_url || null,
+      cutinUrl: row.cutin_url || null,
+      lines: game.linesOf(row), // 대사 프리셋 (상황 → 대사 목록)
       ...stats,
       hp: clamp(row.hp, 1, stats.maxHp),
       mp: clamp(row.mp, 0, stats.maxMp),
@@ -79,6 +81,7 @@ class Battle {
     };
     this.party.set(p.id, p);
     this.log(`${p.name}의 몸을 ${TRANSFORM_FLAVOR[p.element] || '빛이'} 감싼다. 계약의 문장이 새겨진다 — 변신!`);
+    this.say(p, 'start');
     if (this.round === 0) {
       this.log(`${this.def.name}이(가) 모습을 드러냈다. ${this.def.desc}`);
       this.startRound();
@@ -164,6 +167,7 @@ class Battle {
     try {
       switch (cmd.action) {
         case 'attack':
+          this.say(p, 'attack');
           if (auto) this.log(`${p.name}은(는) 머뭇거리다 반사적으로 공격했다. (시간 초과)`);
           this.hitMonster(p, { atk: p.physAtk, coef: 1, element: 'physical', label: '공격' });
           break;
@@ -216,6 +220,14 @@ class Battle {
 
   // ---------- 행동 처리 ----------
 
+  // 대사 프리셋: 그 상황의 대사 중 하나를 무작위로 말풍선에 띄운다. 비어 있으면 말없이.
+  // (전투 결과용 rng와 섞이지 않게 Math.random을 쓴다)
+  say(p, situation) {
+    const list = p.lines?.[situation];
+    if (!list || !list.length || !this.hooks.onLine) return;
+    this.hooks.onLine(this, p, list[Math.floor(Math.random() * list.length)]);
+  }
+
   hitMonster(p, { atk, coef, element, label, hits = 1 }) {
     const resist = RESIST[this.def.resist[element] || 'normal'];
     const atkBoost = 1 + p.buffs.filter((b) => b.kind === 'atk').reduce((sum, b) => sum + b.value, 0);
@@ -235,6 +247,7 @@ class Battle {
   }
 
   useSkill(p, sk) {
+    this.say(p, 'skill');
     p.mp -= sk.mp;
     p.cooldowns[sk.id] = sk.cooldown + 1; // 다음 내 차례 시작 때 1 줄어든다.
     if (sk.type === 'damage') {
@@ -247,6 +260,7 @@ class Battle {
       const parts = targets.map((t) => {
         const healed = Math.min(t.maxHp - t.hp, amount);
         t.hp += healed;
+        if (healed > 0 && t !== p) this.say(t, 'healed');
         return `${t.name} +${healed}`;
       });
       this.log(`${p.name}의 ${sk.name}! HP 회복 (${parts.join(', ')})`);
@@ -316,6 +330,9 @@ class Battle {
       if (target.hp === 0) {
         target.down = true;
         this.log(`${target.name}이(가) 쓰러졌다.`);
+        this.say(target, 'down');
+      } else {
+        this.say(target, 'hurt');
       }
     }
     if (!this.checkEnd()) this.nextTurn();
@@ -333,7 +350,10 @@ class Battle {
     this.ended = true;
     clearTimeout(this.timer);
     this.current = null;
-    if (result === 'victory') this.log(`${this.def.name}을(를) 쓰러뜨렸다!`);
+    if (result === 'victory') {
+      this.log(`${this.def.name}을(를) 쓰러뜨렸다!`);
+      for (const p of this.party.values()) if (!p.down) this.say(p, 'win');
+    }
     if (result === 'defeat') this.log('파티가 전멸했다…');
     this.hooks.onEnd(this, result, [...this.party.values()]);
     return true;
@@ -374,6 +394,7 @@ class Battle {
         id: p.id,
         name: p.name,
         avatarUrl: p.avatarUrl,
+        cutinUrl: p.cutinUrl,
         hp: p.hp,
         maxHp: p.maxHp,
         mp: p.mp,

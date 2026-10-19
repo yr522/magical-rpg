@@ -202,3 +202,29 @@ test('장비가 전투 스탯에 들어간다', async () => {
   assert.strictEqual(res.character.derived.maxHp, before - 10);
   assert.ok(res.character.hp <= res.character.derived.maxHp, 'HP가 최대치를 넘지 않음');
 });
+
+test('장신구는 장신구 2 칸에도 끼고, 가방이 100칸을 넘으면 살 수 없다', async () => {
+  const s = await player();
+  assert.ok((await s.call('move', { to: 'hq_shop' })).ok);
+  assert.ok((await s.call('shop:buy', { code: 'wind_bell' })).ok);
+  let inv = await s.call('inventory:list');
+  const bell = inv.equipment.find((e) => e.code === 'wind_bell');
+  assert.ok((await s.call('inventory:equip', { id: bell.id })).ok);
+  inv = await s.call('inventory:list');
+  // 장신구 칸은 견습 브로치가 쓰고 있으니 비어 있는 장신구 2 칸으로 들어간다.
+  assert.strictEqual(inv.character.equipment.accessory.name, '견습 브로치');
+  assert.strictEqual(inv.character.equipment.accessory2.name, '바람 방울');
+  assert.strictEqual(inv.bag.size, 100);
+
+  // 같은 장비도 한 칸씩 → 가방을 100칸까지 채우면 더 못 산다.
+  const used = inv.bag.used;
+  await store.addItems(s.character.id, Array.from({ length: 100 - used }, () => ({ code: 'steel_baton', grade: 'common', options: {}, slot: 'weapon' })));
+  inv = await s.call('inventory:list');
+  assert.strictEqual(inv.bag.used, 100);
+  const full = await s.call('shop:buy', { code: 'steel_baton' });
+  assert.match(full.error, /가방이 가득/);
+  // 이미 가방에 있는 사탕은 같은 칸에 겹치므로 칸이 늘지 않는다.
+  const rows = await store.listItemRows(s.character.id);
+  assert.strictEqual(game.bagCellsAfter(rows, ['heal_candy']), 100);
+  assert.strictEqual(game.bagCellsAfter(rows, ['mana_jelly']), 101);
+});

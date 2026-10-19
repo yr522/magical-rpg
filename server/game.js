@@ -20,6 +20,42 @@ const slots = new Map(slotList.map((s) => [s.id, s]));
 const shops = new Map(shopList.map((s) => [s.id, s]));
 const { growth } = characterData;
 
+// 아이템을 어디서 얻는지 (상점 · 몬스터 드롭 · 분해 · 처음 시작) — 데이터에서 자동으로 모은다.
+const sources = new Map();
+const addSource = (code, text) => {
+  if (!sources.has(code)) sources.set(code, []);
+  if (!sources.get(code).includes(text)) sources.get(code).push(text);
+};
+for (const shop of shopList) for (const code of shop.sells) addSource(code, shop.name);
+for (const m of monsterList) for (const drop of m.drops || []) addSource(drop.item, m.name);
+for (const code of characterData.startEquipment) addSource(code, '처음 시작할 때');
+addSource('rift_shard', '장비 분해');
+
+// 이 장비를 그 칸에 낄 수 있는지 (장신구는 장신구 2 칸에도).
+const slotFits = (def, slotId) => {
+  const slot = slots.get(slotId);
+  return Boolean(slot && def.kind === 'equipment' && (slotId === def.slot || slot.same === def.slot));
+};
+
+// 가방 칸 수: 장비는 한 개당 한 칸(겹치지 않음), 나머지는 같은 종류끼리 한 칸.
+function bagCells(rows) {
+  const stackCodes = new Set();
+  let cells = 0;
+  for (const it of rows) {
+    const def = items.get(it.code);
+    if (!def || it.equipped) continue;
+    if (def.kind === 'equipment') cells += 1;
+    else stackCodes.add(it.code);
+  }
+  return cells + stackCodes.size;
+}
+
+// 지금 가방에 새 아이템들을 넣으면 몇 칸이 되는지.
+function bagCellsAfter(rows, adding) {
+  const list = [...rows, ...adding.map((x) => (typeof x === 'string' ? { code: x } : x))];
+  return bagCells(list);
+}
+
 // 서버 시작 시 맵이 잘못 적혀 있으면 바로 알려 준다 (없는 구역으로 가는 출구 등).
 function validateMap() {
   for (const zone of mapData.zones) {
@@ -186,11 +222,12 @@ const disassembleShards = (inst) => (grades.get(inst.grade) || grades.get('commo
 
 function itemView(inst, shop) {
   const def = items.get(inst.code);
-  const view = { id: inst.id, code: def.id, name: def.name, kind: def.kind, desc: def.desc };
+  const view = { id: inst.id, code: def.id, name: def.name, kind: def.kind, desc: def.desc, icon: def.icon || '📦', from: sources.get(def.id) || [] };
   if (def.kind === 'equipment') {
     const grade = grades.get(inst.grade) || grades.get('common');
     Object.assign(view, {
-      slot: def.slot,
+      slot: inst.slot || def.slot,
+      kindSlot: def.slot,
       slotName: slots.get(def.slot).name,
       grade: grade.id,
       gradeName: grade.name,
@@ -254,6 +291,65 @@ function buildNewCharacter(input) {
   };
 }
 
+// ---------- OC 프로필 ----------
+const profileRules = characterData.profile;
+const startTitles = profileRules.titles.filter((t) => t.when === 'start').map((t) => t.name);
+const titlesOf = (row) => [...new Set([...startTitles, ...(Array.isArray(row.titles) ? row.titles : [])])];
+const titleOf = (row) => (row.title && titlesOf(row).includes(row.title) ? row.title : startTitles[0] || '');
+const titlesFor = (when) => profileRules.titles.filter((t) => t.when === when).map((t) => t.name);
+const linesOf = (row) => (row.custom_lines && typeof row.custom_lines === 'object' ? row.custom_lines : {});
+
+// 사진: 브라우저가 줄여서 보낸 JPEG/PNG/WEBP 글자(data URL)만, 너무 크면 거절.
+const PHOTO_PATTERN = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+const PHOTO_MAX = 300 * 1024;
+
+// 프로필 편집 내용 검사. 바꿀 컬럼만 돌려준다. (이름 중복은 저장할 때 DB가 막는다)
+function validateProfile(input, row) {
+  const fields = {};
+  if (input.name !== undefined) {
+    const name = typeof input.name === 'string' ? input.name.trim() : '';
+    if (!NAME_PATTERN.test(name)) return { error: '이름은 한글/영문/숫자 2~12자로 지어 주세요.' };
+    if (name !== row.name) fields.name = name;
+  }
+  if (input.gender !== undefined) {
+    if (!findOption(characterData.genders, input.gender)) return { error: '성별을 골라 주세요.' };
+    fields.gender = input.gender;
+  }
+  if (input.title !== undefined) {
+    if (!titlesOf(row).includes(input.title)) return { error: '얻은 칭호만 달 수 있습니다.' };
+    fields.title = input.title;
+  }
+  if (input.text !== undefined) {
+    if (typeof input.text !== 'string' || input.text.length > profileRules.textMax) return { error: `OC 설정은 ${profileRules.textMax}자까지 적을 수 있습니다.` };
+    fields.profile_text = input.text;
+  }
+  if (input.photo !== undefined) {
+    if (input.photo === 'default') {
+      fields.avatar_url = null;
+      fields.cutin_url = null;
+    } else {
+      const { avatar, cutin } = input.photo || {};
+      // 커스텀 사진은 두 장(정사각형 프사 + 세로로 긴 컷인)을 모두 받아야 한다.
+      const ok = (x) => typeof x === 'string' && x.length <= PHOTO_MAX && PHOTO_PATTERN.test(x);
+      if (!ok(avatar) || !ok(cutin)) return { error: '커스텀 사진은 프로필 사진과 컷인 사진 두 장을 모두 올려야 합니다.' };
+      fields.avatar_url = avatar;
+      fields.cutin_url = cutin;
+    }
+  }
+  if (input.lines !== undefined) {
+    const lines = {};
+    for (const sit of profileRules.lineSituations) {
+      const list = Array.isArray(input.lines?.[sit.id]) ? input.lines[sit.id] : [];
+      const clean = list.filter((t) => typeof t === 'string').map((t) => t.trim()).filter(Boolean);
+      if (clean.length > profileRules.linesPerSituation) return { error: `대사는 상황마다 ${profileRules.linesPerSituation}개까지입니다.` };
+      if (clean.some((t) => t.length > profileRules.lineMax)) return { error: `대사 한 줄은 ${profileRules.lineMax}자까지입니다.` };
+      if (clean.length) lines[sit.id] = clean;
+    }
+    fields.custom_lines = lines;
+  }
+  return { fields };
+}
+
 // 클라이언트에 보낼 캐릭터 정보 (내부 컬럼 이름을 화면용으로 정리).
 function characterView(row) {
   const base = statsOf(row);
@@ -279,12 +375,18 @@ function characterView(row) {
       const inst = (row.equipment || []).find((e) => e.slot === sl.id);
       return [sl.id, inst ? itemView(inst) : null];
     })),
-    derived: derivedStats(stats, row.level),
+    derived: { ...derivedStats(stats, row.level), physAtk: stats.str * 2 + row.level, magAtk: stats.mag * 2 + row.level, def: Math.round(stats.vit * 1.5 + row.level) },
+    slots: slotList.map((sl) => ({ id: sl.id, name: sl.name })),
     skills: skillsFor(row.class, row.level).map((sk) => ({ id: sk.id, name: sk.name, mp: sk.mp, desc: sk.desc })),
     nextSkill: (skillList.find((sk) => sk.class === row.class && sk.level > row.level) || {}).level || null,
     locationId: row.location_id,
     locationName: zone ? zone.name : '알 수 없는 곳',
     avatarUrl: row.avatar_url || null,
+    cutinUrl: row.cutin_url || null,
+    title: titleOf(row),
+    titles: titlesOf(row),
+    profileText: row.profile_text || '',
+    customLines: linesOf(row),
   };
 }
 
@@ -316,6 +418,9 @@ module.exports = {
   equipmentStats,
   rollEquipment,
   rollDrops,
+  slotFits,
+  bagCells,
+  bagCellsAfter,
   buyPrice,
   sellPrice,
   disassembleShards,
@@ -333,4 +438,10 @@ module.exports = {
   buildNewCharacter,
   characterView,
   zoneView,
+  profileRules,
+  validateProfile,
+  titleOf,
+  titlesOf,
+  titlesFor,
+  linesOf,
 };

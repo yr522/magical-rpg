@@ -272,3 +272,17 @@ test('본부에 들어오면 HP/MP 회복', async () => {
   assert.strictEqual(home.healed, true);
   assert.strictEqual(home.character.hp, home.character.derived.maxHp);
 });
+
+test('대사 프리셋: 전투 시작 · 공격할 때 내 대사가 전투 채팅(말풍선)으로 나온다', async () => {
+  const s = await player();
+  assert.ok((await s.call('profile:update', { lines: { start: ['계약의 이름으로!'], attack: ['간다!'] } })).ok);
+  const said = [];
+  s.on('chat', (m) => { if (m.channel === 'battle' && m.preset) said.push(m.text); });
+  await walkToRift(s);
+  await s.call('raid:enter', { eventId: 'test_vine' });
+  await until(s, myTurn);
+  await s.call('battle:action', { action: 'attack' });
+  await until(s, () => said.length >= 2);
+  assert.deepStrictEqual(said.slice(0, 2), ['계약의 이름으로!', '간다!']);
+  await s.call('battle:action', { action: 'flee' }).catch(() => {});
+});

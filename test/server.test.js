@@ -191,3 +191,108 @@ test('다른 사람 캐릭터는 고르거나 지울 수 없다', async () => {
   assert.ok((await thief.call('char:select', { id: a.character.id })).error);
   assert.ok((await thief.call('char:delete', { id: a.character.id })).error);
 });
+
+test('OC 프로필: 이름 중복 확인, 칭호 · 성별 · 설정 · 사진 두 장 · 대사 프리셋 저장', async () => {
+  const s = await client();
+  await s.call('auth:register', { nickname: '프로필러', password: 'pass1234' });
+  const a = await s.call('char:create', { name: '프로필가', gender: 'girl', element: 'light', classId: 'attacker', godId: 'god_mag' });
+  assert.ok(a.ok, a.error);
+  await s.call('char:create', { name: '이미있음', gender: 'boy', element: 'water', classId: 'guardian', godId: 'god_vit' });
+  await s.call('char:select', { id: a.character.id });
+
+  assert.strictEqual((await s.call('profile:checkName', { name: '이미있음' })).available, false);
+  assert.strictEqual((await s.call('profile:checkName', { name: '새이름' })).available, true);
+  assert.match((await s.call('profile:update', { name: '이미있음' })).error, /이미/);
+
+  // 커스텀 사진은 두 장 다 있어야 한다.
+  const img = 'data:image/jpeg;base64,AAAA';
+  assert.match((await s.call('profile:update', { photo: { avatar: img } })).error, /두 장/);
+  assert.match((await s.call('profile:update', { title: '없는 칭호' })).error, /얻은 칭호/);
+  const lines = { attack: ['간다!', '받아라!'], win: ['오늘도 무사해.'] };
+  const res = await s.call('profile:update', { name: '새이름', gender: 'boy', title: '견습 계약자', text: '별을 좋아한다.', photo: { avatar: img, cutin: img }, lines });
+  assert.ok(res.ok, res.error);
+  assert.strictEqual(res.character.name, '새이름');
+  assert.strictEqual(res.character.gender, 'boy');
+  assert.strictEqual(res.character.cutinUrl, img);
+  assert.deepStrictEqual(res.character.customLines, lines);
+  assert.match((await s.call('profile:update', { lines: { attack: ['1', '2', '3', '4'] } })).error, /3개/);
+
+  const view = await s.call('profile:view', { id: a.character.id });
+  assert.strictEqual(view.profile.text, '별을 좋아한다.');
+  assert.strictEqual(view.profile.equipment.weapon.name, '견습 마법봉');
+  assert.strictEqual(view.profile.mine, true);
+});
+
+test('친구: 신청 → 수락, 관계: 친구에게만 신청 → 수락하면 두 프로필에 보이고, 친구를 끊으면 관계도 사라진다', async () => {
+  const mk = async (nick, name) => {
+    const s = await client();
+    await s.call('auth:register', { nickname: nick, password: 'pass1234' });
+    const c = await s.call('char:create', { name, gender: 'girl', element: 'water', classId: 'supporter', godId: 'god_mag' });
+    await s.call('char:select', { id: c.character.id });
+    s.id = c.character.id;
+    return s;
+  };
+  const a = await mk('친구가', '친구에이');
+  const b = await mk('친구비', '친구비이');
+  assert.match((await a.call('friends:request', { name: '없는사람' })).error, /없어요/);
+  assert.match((await a.call('relation:request', { id: b.id, name: '라이벌' })).error, /친구 목록/);
+
+  const changed = new Promise((r) => b.once('links:changed', r));
+  assert.ok((await a.call('friends:request', { name: '친구비이' })).ok);
+  await changed;
+  let lb = await b.call('friends:list');
+  assert.strictEqual(lb.incoming[0].name, '친구에이');
+  lb = await b.call('links:answer', { linkId: lb.incoming[0].linkId, accept: true });
+  assert.strictEqual(lb.friends[0].name, '친구에이');
+  assert.strictEqual(lb.friends[0].status, 'online');
+
+  const r = await a.call('relation:request', { id: b.id, name: '소꿉친구' });
+  assert.ok(r.ok, r.error);
+  lb = await b.call('friends:list');
+  const rel = lb.relations[0];
+  assert.ok(rel.incoming);
+  await b.call('links:answer', { linkId: rel.linkId, accept: true });
+  const pa = (await b.call('profile:view', { id: a.id })).profile;
+  assert.deepStrictEqual(pa.relations, [{ id: b.id, name: '친구비이', relation: '소꿉친구' }]);
+  assert.strictEqual(pa.friend, 'friend');
+
+  const fa = await a.call('friends:list');
+  await a.call('links:remove', { linkId: fa.friends[0].linkId });
+  assert.deepStrictEqual((await a.call('profile:view', { id: a.id })).profile.relations, []);
+});
+
+test('파티: 접속 중인 사람만 초대 → 수락, 파티장 위임 · 이름 바꾸기 · 추방 · 나가기', async () => {
+  const mk = async (nick, name) => {
+    const s = await client();
+    await s.call('auth:register', { nickname: nick, password: 'pass1234' });
+    const c = await s.call('char:create', { name, gender: 'girl', element: 'water', classId: 'supporter', godId: 'god_mag' });
+    await s.call('char:select', { id: c.character.id });
+    s.id = c.character.id;
+    return s;
+  };
+  const a = await mk('파티가', '파티장님');
+  const b = await mk('파티비', '파티원님');
+  const c = await mk('파티씨', '셋째님');
+  await c.call('char:leave');
+  assert.match((await a.call('party:invite', { name: '셋째님' })).error, /오프라인/);
+  assert.match((await a.call('party:invite', { name: '아무도아님' })).error, /없어요/);
+
+  const invited = new Promise((r) => b.once('party:invited', r));
+  let r = await a.call('party:invite', { name: '파티원님' });
+  assert.ok(r.ok, r.error);
+  assert.strictEqual(r.party.name, '파티장님의 파티');
+  const inv = await invited;
+  r = await b.call('party:respond', { partyId: inv.partyId, accept: true });
+  assert.deepStrictEqual(r.party.members.map((m) => [m.name, m.leader]), [['파티장님', true], ['파티원님', false]]);
+
+  assert.match((await b.call('party:rename', { name: '별빛단' })).error, /파티장만/);
+  assert.strictEqual((await a.call('party:rename', { name: '별빛단' })).party.name, '별빛단');
+  r = await a.call('party:delegate', { id: b.id });
+  assert.strictEqual(r.party.leaderId, b.id);
+  assert.strictEqual(r.party.members[0].name, '파티원님');
+  r = await b.call('party:kick', { id: a.id });
+  assert.strictEqual(r.party.members.length, 1);
+  assert.strictEqual((await a.call('party:view')).party, null);
+  await b.call('party:leave');
+  assert.strictEqual((await b.call('party:view')).party, null);
+});

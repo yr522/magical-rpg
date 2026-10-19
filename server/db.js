@@ -15,6 +15,11 @@ const MUTABLE_COLUMNS = [
 
 const pickMutable = (fields) => Object.entries(fields).filter(([k]) => MUTABLE_COLUMNS.includes(k));
 
+// OC 프로필에서 바꿀 수 있는 컬럼. updateProfile만 고친다.
+const PROFILE_COLUMNS = ['name', 'gender', 'title', 'titles', 'profile_text', 'avatar_url', 'cutin_url', 'custom_lines'];
+const JSON_COLUMNS = new Set(['titles', 'custom_lines']);
+const pickProfile = (fields) => Object.entries(fields).filter(([k]) => PROFILE_COLUMNS.includes(k));
+
 // 같은 코드의 아이템을 묶어 [{ code, count }]로 만든다.
 function countItems(codes) {
   const counts = new Map();
@@ -24,6 +29,9 @@ function countItems(codes) {
 
 // 새 아이템은 코드 문자열이나 { code, grade, options, slot, equipped } 둘 다 받는다.
 const normalizeItem = (x) => (typeof x === 'string' ? { code: x } : x);
+
+// 친구 · 관계 한 줄
+const linkRow = (r) => ({ id: Number(r.id), kind: r.kind, fromId: Number(r.from_id), toId: Number(r.to_id), name: r.name || null, status: r.status });
 
 // 아이템 한 줄을 화면/게임 코드에서 쓰는 모양으로.
 const itemRow = (r) => ({
@@ -108,6 +116,24 @@ function createPostgresStore(connectionString) {
       const sets = entries.map(([k], i) => `${k} = $${i + 2}`).join(', ');
       await pool.query(`UPDATE characters SET ${sets} WHERE id = $1`, [id, ...entries.map(([, v]) => v)]);
     },
+    // 프로필 저장. 이름이 다른 캐릭터와 겹치면 아무것도 바꾸지 않고 false.
+    async updateProfile(id, fields) {
+      const entries = pickProfile(fields);
+      if (!entries.length) return true;
+      const sets = entries.map(([k], i) => `${k} = $${i + 2}${JSON_COLUMNS.has(k) ? '::jsonb' : ''}`).join(', ');
+      const values = entries.map(([k, v]) => (JSON_COLUMNS.has(k) ? JSON.stringify(v) : v));
+      try {
+        await pool.query(`UPDATE characters SET ${sets} WHERE id = $1`, [id, ...values]);
+        return true;
+      } catch (err) {
+        if (isUniqueViolation(err)) return false;
+        throw err;
+      }
+    },
+    async isNameTaken(name, exceptId) {
+      const { rows } = await pool.query('SELECT 1 FROM characters WHERE lower(name) = lower($1) AND id <> $2', [name, exceptId || 0]);
+      return rows.length > 0;
+    },
     async addItems(ownerId, list, client = pool) {
       if (!list.length) return;
       const values = [];
@@ -157,6 +183,10 @@ function createPostgresStore(connectionString) {
       }
     },
     // 장착: 같은 칸의 다른 장비를 빼고 이 장비를 낀다. 해제: equip=false.
+    // 장비를 다른 칸(예: 장신구 → 장신구 2)에 끼울 때 그 장비가 들어갈 칸을 바꾼다.
+    async setItemSlot(ownerId, itemId, slot) {
+      await pool.query('UPDATE items SET slot = $3 WHERE id = $1 AND owner_id = $2 AND NOT is_equipped', [itemId, ownerId, slot]);
+    },
     async setEquipped(ownerId, itemId, equip) {
       const client = await pool.connect();
       try {
@@ -188,6 +218,28 @@ function createPostgresStore(connectionString) {
         [ownerId, code],
       );
       return rowCount > 0;
+    },
+    // ---------- 친구 · 관계 (links) ----------
+    async getCharacterByName(name) {
+      const { rows } = await pool.query('SELECT * FROM characters WHERE lower(name) = lower($1)', [name]);
+      return withNumberIds(rows[0]);
+    },
+    async listLinks(charId) {
+      const { rows } = await pool.query('SELECT * FROM links WHERE from_id = $1 OR to_id = $1 ORDER BY id', [charId]);
+      return rows.map(linkRow);
+    },
+    async addLink({ kind, fromId, toId, name = null, status = 'pending' }) {
+      const { rows } = await pool.query(
+        'INSERT INTO links (kind, from_id, to_id, name, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [kind, fromId, toId, name, status],
+      );
+      return linkRow(rows[0]);
+    },
+    async setLinkStatus(id, status) {
+      await pool.query('UPDATE links SET status = $2 WHERE id = $1', [id, status]);
+    },
+    async deleteLink(id) {
+      await pool.query('DELETE FROM links WHERE id = $1', [id]);
     },
     async close() {
       await pool.end();
@@ -249,6 +301,7 @@ function createFileStore(filePath) {
       data.characters = data.characters.filter((c) => !(c.id === id && c.user_id === userId));
       if (data.characters.length === before) return false;
       data.items = data.items.filter((i) => i.owner_id !== id);
+      data.links = (data.links || []).filter((l) => l.from_id !== id && l.to_id !== id);
       save();
       return true;
     },
@@ -264,6 +317,17 @@ function createFileStore(filePath) {
       if (!row) return;
       for (const [k, v] of pickMutable(fields)) row[k] = v;
       save();
+    },
+    async updateProfile(id, fields) {
+      const row = data.characters.find((c) => c.id === id);
+      if (!row) return false;
+      if (fields.name && data.characters.some((c) => c.id !== id && lower(c.name) === lower(fields.name))) return false;
+      for (const [k, v] of pickProfile(fields)) row[k] = v;
+      save();
+      return true;
+    },
+    async isNameTaken(name, exceptId) {
+      return data.characters.some((c) => c.id !== exceptId && lower(c.name) === lower(name));
     },
     async addItems(ownerId, list, { skipSave = false } = {}) {
       if (!list.length) return;
@@ -300,6 +364,11 @@ function createFileStore(filePath) {
       save();
       return true;
     },
+    async setItemSlot(ownerId, itemId, slot) {
+      const item = data.items.find((i) => i.id === itemId && i.owner_id === ownerId && !i.is_equipped);
+      if (item) item.slot = slot;
+      save();
+    },
     async setEquipped(ownerId, itemId, equip) {
       const item = data.items.find((i) => i.id === itemId && i.owner_id === ownerId);
       if (!item || !item.slot) return false;
@@ -314,6 +383,29 @@ function createFileStore(filePath) {
       data.items.splice(index, 1);
       save();
       return true;
+    },
+    async getCharacterByName(name) {
+      return copy(data.characters.find((c) => lower(c.name) === lower(name)));
+    },
+    async listLinks(charId) {
+      return (data.links || []).filter((l) => l.from_id === charId || l.to_id === charId).map(linkRow);
+    },
+    async addLink({ kind, fromId, toId, name = null, status = 'pending' }) {
+      data.links = data.links || [];
+      data.nextLinkId = data.nextLinkId || 1;
+      const row = { id: data.nextLinkId++, kind, from_id: fromId, to_id: toId, name, status, created_at: new Date().toISOString() };
+      data.links.push(row);
+      save();
+      return linkRow(row);
+    },
+    async setLinkStatus(id, status) {
+      const row = (data.links || []).find((l) => l.id === id);
+      if (row) row.status = status;
+      save();
+    },
+    async deleteLink(id) {
+      data.links = (data.links || []).filter((l) => l.id !== id);
+      save();
     },
     async close() {},
   };

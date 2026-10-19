@@ -7,6 +7,27 @@
     "luk": 5
   },
   "startGold": 100,
+  "bagSize": 100,
+  "profile": {
+    "_설명": "OC 프로필 규칙. titles: 칭호와 얻는 조건(start=처음부터, firstVictory=첫 토벌 승리). lineSituations: 대사 프리셋 상황.",
+    "textMax": 2000,
+    "linesPerSituation": 3,
+    "lineMax": 40,
+    "relationMax": 12,
+    "titles": [
+      { "name": "견습 계약자", "when": "start" },
+      { "name": "첫 토벌의 증인", "when": "firstVictory" }
+    ],
+    "lineSituations": [
+      { "id": "start", "name": "전투 시작 (변신)" },
+      { "id": "attack", "name": "공격할 때" },
+      { "id": "skill", "name": "스킬 쓸 때" },
+      { "id": "hurt", "name": "다쳤을 때" },
+      { "id": "healed", "name": "회복받았을 때" },
+      { "id": "down", "name": "쓰러졌을 때" },
+      { "id": "win", "name": "승리했을 때" }
+    ]
+  },
   "startLocation": "hq_plaza",
   "startItems": [
     "heal_candy",
@@ -36,35 +57,51 @@
   "elements": [
     {
       "id": "fire",
-      "name": "화염"
+      "name": "화염",
+      "icon": "🔥",
+      "color": "#ff6b4a"
     },
     {
       "id": "water",
-      "name": "물"
+      "name": "물",
+      "icon": "💧",
+      "color": "#5cb8ff"
     },
     {
       "id": "nature",
-      "name": "자연"
+      "name": "자연",
+      "icon": "🌿",
+      "color": "#6fd36a"
     },
     {
       "id": "light",
-      "name": "빛"
+      "name": "빛",
+      "icon": "✨",
+      "color": "#ffd84a"
     },
     {
       "id": "dark",
-      "name": "암흑"
+      "name": "암흑",
+      "icon": "🌑",
+      "color": "#a77bff"
     },
     {
       "id": "thunder",
-      "name": "번개"
+      "name": "번개",
+      "icon": "⚡",
+      "color": "#ffe14a"
     },
     {
       "id": "ice",
-      "name": "얼음"
+      "name": "얼음",
+      "icon": "❄️",
+      "color": "#9fe6ff"
     },
     {
       "id": "physical",
-      "name": "물리"
+      "name": "물리",
+      "icon": "✊",
+      "color": "#c9c4d6"
     }
   ],
   "classes": [
