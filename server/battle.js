@@ -56,7 +56,8 @@ class Battle {
 
   // ---------- 입장 / 퇴장 ----------
 
-  join(row, items) {
+  // defer: 파티가 같이 들어올 때 마지막 사람이 들어올 때까지 전투를 시작하지 않는다.
+  join(row, items, defer = false) {
     const stats = game.combatStats(row);
     const p = {
       id: row.id,
@@ -83,6 +84,7 @@ class Battle {
     this.log(`${p.name}의 몸을 ${TRANSFORM_FLAVOR[p.element] || '빛이'} 감싼다. 계약의 문장이 새겨진다 — 변신!`);
     this.say(p, 'start');
     if (this.round === 0) {
+      if (defer) return this.update();
       this.log(`${this.def.name}이(가) 모습을 드러냈다. ${this.def.desc}`);
       this.startRound();
     } else {

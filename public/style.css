@@ -593,3 +593,15 @@ body.light .popup-close { color: var(--text); }
 .pp-top small { font-size: 12px; opacity: .75; }
 .pp-top b.me { color: #cdb3ff; }
 .pp-where { font-size: 10px; opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 묻는 팝업 (파티 초대 · 같이 토벌 입장) */
+.ask-pop { display: flex; flex-direction: column; gap: 12px; }
+.ask-pop .ptitle { padding-right: 24px; }
+.ask-pop p { margin: 0; }
+.ask-pop .dactions { justify-content: flex-end; }
+.ask-pop .pbtn { height: 36px; padding: 0 18px; font-size: 14px; }
+.vote-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.vote-list li { padding: 8px 12px; border-radius: 8px; background: var(--panel-2); color: var(--muted); }
+.vote-list li.ok { color: var(--text); }
+.vote-list li.ok span { color: #7fd49a; }
+.vote-list small { font-size: 12px; color: var(--muted); }
