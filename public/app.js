@@ -519,6 +519,28 @@
   // 첫 전투 화면이 오기 전에 온 기록은 버린다 (첫 화면에 지금까지의 기록이 다 들어 있다).
   socket.on('battle:log', ({ text }) => { if (state.battle) addBattleLog(text); });
 
+  // 몬스터가 맞으면 데미지 숫자가 몬스터 근처 무작위 위치에서 떠오른다. 속성 데미지는 그 속성 색.
+  socket.on('battle:hit', (hit) => {
+    if (!state.battle) return;
+    const fig = $('enemy-figure');
+    const box = fig.closest('.scene');
+    const color = hit.miss ? '' : (state.options?.elements.find((e) => e.id === hit.element)?.color || '#fff');
+    const pop = el('span', {
+      class: `dmg-pop ${hit.miss ? 'miss' : ''} ${hit.crit ? 'crit' : ''} ${hit.resist === 'weak' ? 'weak' : ''} ${hit.resist === 'resist' ? 'resist' : ''}`,
+      text: hit.miss ? 'MISS' : hit.amount === 0 ? '면역' : String(hit.amount),
+      'aria-hidden': 'true',
+    });
+    const r = fig.getBoundingClientRect();
+    const base = box.getBoundingClientRect();
+    pop.style.left = `${r.left - base.left + r.width * (0.25 + Math.random() * 0.5)}px`;
+    pop.style.top = `${r.top - base.top + r.height * (0.15 + Math.random() * 0.45)}px`;
+    pop.style.setProperty('--dx', `${Math.round((Math.random() - 0.5) * 40)}px`);
+    if (color) pop.style.setProperty('--dmg', color);
+    box.appendChild(pop);
+    pop.addEventListener('animationend', () => pop.remove());
+    setTimeout(() => pop.remove(), 2000);
+  });
+
   socket.on('battle:end', (data) => {
     setBattleMode(false);
     state.character = data.character;
@@ -573,7 +595,8 @@
       const turn = b.turn && b.turn.kind === 'player' && b.turn.id === p.id;
       const lost = p.maxHp ? 100 - Math.round((p.hp / p.maxHp) * 100) : 0;
       return el('div', { class: `cut ${side} ${turn ? 'turn' : ''} ${p.down ? 'down' : ''}`, style: `top:${top}%;height:${height}%` }, [
-        el('div', { class: 'cut-frame', style: `clip-path:${CLIP[side]}` }, [
+        el('div', { class: 'cut-frame' }, [
+          el('span', { class: 'cut-ring', 'aria-hidden': 'true' }),
           el('div', { class: 'cut-photo', role: 'img', 'aria-label': `${p.name} HP ${p.hp}/${p.maxHp}`, title: `${p.name} HP ${p.hp}/${p.maxHp}`, style: `clip-path:${CLIP[side]}` }, [
             tall ? photo(p.cutinUrl, 'half') : photo(p.avatarUrl, 'bust'),
             el('span', { class: 'cut-hp', 'aria-hidden': 'true', style: `height:${lost}%` }),
