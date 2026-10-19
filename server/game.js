@@ -296,6 +296,7 @@ function zoneView(zoneId) {
     name: zone.name,
     desc: zone.desc,
     region: { id: region.id, name: region.name, safe: region.safe },
+    colors: region.colors || {},
     exits: zone.exits.map((e) => ({ label: e.label, to: e.to })),
   };
 }

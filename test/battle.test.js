@@ -181,7 +181,7 @@ test('공격 · 스킬 · 쿨다운 · 아이템 · 승리 보상 · 레벨업',
   await until(s, (x) => x.ended?.result === 'fled' && x.ended);
 });
 
-test('시간 초과면 자동 방어, 계속 방어만 하다 전멸하면 본부로 귀환 + 골드 10% 손실', async () => {
+test('시간 초과면 자동 공격, 계속 방어만 하다 전멸하면 본부로 귀환 + 골드 10% 손실', async () => {
   const s = await player('attacker', 'god_str');
   await walkToRift(s);
   await s.call('raid:enter', { eventId: 'test_vine' });

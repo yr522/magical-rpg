@@ -68,6 +68,9 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
 
   const sendPlayers = (zoneId) => io.to(zoneRoom(zoneId)).emit('zone:players', playersInZone(zoneId));
 
+  // 지금 게임 안에 있는 캐릭터 수 (화면 맨 아래 상태 줄)
+  const sendOnlineCount = () => io.to(WORLD_ROOM).emit('online:count', { count: online.size });
+
   const systemMessage = (zoneId, text) => io.to(zoneRoom(zoneId)).emit('log', { text });
   const notice = (text) => io.to(WORLD_ROOM).emit('notice', { text, at: Date.now() });
 
@@ -273,6 +276,7 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
     online.delete(characterId);
     systemMessage(entry.row.location_id, `${entry.row.name}이(가) 떠났다.`);
     sendPlayers(entry.row.location_id);
+    sendOnlineCount();
   }
 
   function detachSocket(socket) {
@@ -316,6 +320,7 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
       players: playersInZone(zoneId),
       history: { zone: zoneHistory(zoneId), global: chatHistory.global },
       resumed: !isNew,
+      onlineCount: online.size,
     });
     const battle = entry.battleId && battles.get(entry.battleId);
     if (battle) {
@@ -325,6 +330,7 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
     }
     if (isNew) systemMessage(zoneId, `${row.name}이(가) 나타났다.`);
     sendPlayers(zoneId);
+    if (isNew) sendOnlineCount();
   }
 
   const currentEntry = (socket) => online.get(socket.data.characterId);
