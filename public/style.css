@@ -218,7 +218,10 @@ body.light {
 .chat-log .ava.sys { background: transparent; color: var(--system); }
 .chat-log .body { min-width: 0; padding-top: 2px; }
 .chat-log .tag { font-size: 12px; margin-right: 4px; }
-.chat-log .name { font-weight: 700; margin-right: 4px; }
+.chat-log .name { font-weight: 700 !important; margin-right: 4px; padding: 0; border: none; background: none; color: inherit; font-size: inherit; cursor: pointer; }
+.chat-log .name:hover, .people-panel .pname:hover { text-decoration: underline; }
+.people-panel .pname { padding: 0; border: none; background: none; color: #fff; font-size: 14px; font-weight: 500 !important; cursor: pointer; }
+.people-panel .pname.me { color: #cdb3ff; }
 .chat-log .global .tag { color: var(--global); }
 .chat-log .zone .tag { color: var(--accent); }
 .chat-log .system .tag, .chat-log .system .text { color: var(--system); }
@@ -307,6 +310,7 @@ body.light .tile.danger { color: #b4233a; }
 .modal { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(5,4,10,.6); }
 .popup { position: relative; max-width: 100%; max-height: calc(100vh - 32px); overflow: auto; box-sizing: border-box; background: linear-gradient(135deg, var(--panel) 0%, var(--bg) 100%); color: var(--text); filter: drop-shadow(0 20px 40px rgba(0,0,0,.5)); font-size: 14px; line-height: 1.5; }
 .popup button { font-weight: 400; }
+#modal-content { height: 100%; }
 .popup-close { position: absolute; right: 12px; top: 10px; z-index: 6; width: 18px; height: 18px; padding: 0; border: none; background: transparent; color: #fff; font-size: 13px; line-height: 1; }
 body.light .popup-close { color: var(--text); }
 .pop-small { width: 400px; padding: 24px 26px; }
@@ -437,4 +441,93 @@ body.light .popup-close { color: var(--text); }
   .inv-win, .shop-win { flex-direction: column; height: auto; }
   .inv-right, .shop-col { flex: none; height: 320px; }
   .raid-grid { grid-template-columns: 1fr; }
+}
+
+/* ===== OC 프로필 (보기: 가로 카드, 오른쪽 아래 모서리를 비스듬히 자름) ===== */
+.pop-profile { width: 1040px; height: 640px; padding: 0; background: none; overflow: visible; }
+.pcard {
+  width: 100%; height: 100%; box-sizing: border-box; display: grid; grid-template-columns: 290px minmax(0, 1fr) 220px; grid-template-rows: auto minmax(0, 1fr);
+  column-gap: 52px; padding: 0 26px 26px 0; background: linear-gradient(135deg, var(--panel) 0%, var(--bg) 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 80%, 88% 100%, 0 100%);
+}
+.pc-photo { grid-row: 1 / 3; grid-column: 1; position: relative; overflow: hidden; margin: 26px 0 -26px 26px; background: linear-gradient(160deg, #5b3fa0 0%, #14111d 100%); }
+.pc-photo img, .pc-photo svg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.pc-default { position: absolute; left: 14px; bottom: 12px; font-size: 12px; color: rgba(255,255,255,.7); }
+.pc-head { grid-row: 1; grid-column: 2; display: flex; flex-direction: column; gap: 44px; padding: 30px 0 44px; }
+.pc-orn { max-width: 420px; }
+.pc-namebox { display: flex; flex-direction: column; gap: 8px; }
+.pc-name { margin: 0; font: 700 46px/1.05 "Gowun Batang", serif; }
+.pc-title { font-size: 14px; color: var(--title); }
+.pc-line { display: flex; align-items: center; gap: 12px; height: 36px; }
+.pc-lv { font-size: 26px; font-weight: 700; line-height: 1; }
+.pc-el { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; border: 2px solid var(--line); font-size: 17px; }
+.pc-cls { font-size: 18px; }
+.pc-gender { font-size: 13px; color: var(--muted); }
+.pc-body { grid-row: 2; grid-column: 2; min-height: 0; display: flex; flex-direction: column; gap: 14px; }
+.pc-text { flex: 1; min-height: 0; overflow: auto; padding-right: 8px; white-space: pre-line; font-size: 15px; line-height: 1.75; }
+.pc-buttons { display: flex; gap: 10px; }
+.pc-buttons .pbtn { height: 40px; padding: 0 18px; font-size: 14px; }
+.pc-side { grid-row: 1 / 3; grid-column: 3; min-height: 0; padding-top: 52px; display: flex; flex-direction: column; gap: 22px; }
+.rel-list { max-height: 214px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.rel-row { flex: none; height: 38px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-radius: 6px; font-size: 14px; color: var(--text); border: 1px solid var(--line); background: var(--panel-2); }
+.rel-row span { color: var(--muted); }
+.rel-row.empty { border-style: dashed; background: transparent; }
+.pc-equip { position: relative; }
+.pc-equip h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
+.pc-eq-grid { display: grid; grid-template-columns: repeat(2, 52px); grid-auto-rows: 52px; gap: 8px; }
+.eq-tip { position: absolute; left: 124px; top: 20px; z-index: 5; width: 190px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); font-size: 13px; line-height: 1.5; box-shadow: 0 8px 20px rgba(0,0,0,.5); display: flex; flex-direction: column; }
+.eq-tip span { color: var(--muted); }
+.eq-tip .tstats { color: var(--text); margin-top: 4px; }
+
+/* 프로필 편집 */
+.pop-pedit { width: 1040px; height: 720px; padding: 0; }
+.pedit { height: 100%; display: flex; flex-direction: column; }
+.pedit-head { flex: none; height: 56px; padding: 0 40px 0 24px; display: flex; align-items: center; border-bottom: 1px solid var(--line); }
+.pedit-head h2 { margin: 0; font-size: 17px; }
+.pedit-main { flex: 1; min-height: 0; display: flex; }
+.pedit-tabs { flex: 0 0 180px; padding: 16px 12px; display: flex; flex-direction: column; gap: 6px; border-right: 1px solid var(--line); }
+.pedit-tabs button { height: 44px; padding: 0 14px; text-align: left; border-radius: 10px; border: none; background: transparent; color: var(--muted); font-size: 15px; }
+.pedit-tabs button.on { background: var(--panel-2); color: var(--text); font-weight: 700 !important; box-shadow: inset 3px 0 0 var(--accent); }
+.pedit-body { flex: 1; min-width: 0; overflow: auto; padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
+.pedit-foot { flex: none; height: 68px; padding: 0 24px; display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); }
+.pedit-foot .pbtn { height: 40px; padding: 0 18px; font-size: 14px; }
+.pedit-status { flex: 1; font-size: 13px; color: #ffb35c; }
+.pfield { display: flex; flex-direction: column; gap: 6px; max-width: 560px; }
+.pfield > label, .plabel { font-size: 14px; font-weight: 700; }
+.prow { display: flex; gap: 8px; }
+.prow input { flex: 1; margin: 0; }
+.prow .pbtn { height: 44px; }
+.pedit input, .pedit select { margin: 0; height: 44px; }
+.pedit textarea { flex: 1; min-height: 420px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font: inherit; font-size: 15px; line-height: 1.6; resize: none; }
+.phelp { margin: 0; font-size: 13px; color: var(--muted); }
+.phelp.good { color: #7fd49a; }
+.phelp.bad { color: #ff8a96; }
+.phelp.warn { color: #ffb35c; }
+.phelp.right { text-align: right; }
+.ptoggle { display: flex; gap: 8px; }
+.ptoggle button { height: 40px; padding: 0 18px; border-radius: 10px; font-size: 14px; border: 1px solid var(--line); background: transparent; color: var(--text); }
+.ptoggle button.on { border-color: var(--accent); background: var(--accent); color: var(--accent-text); font-weight: 700 !important; }
+.pmodes { display: flex; gap: 12px; }
+.pmodes button { flex: 0 0 260px; padding: 14px 16px; text-align: left; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--text); display: flex; flex-direction: column; gap: 2px; }
+.pmodes button.on { border: 2px solid var(--accent); background: var(--panel-2); }
+.pmodes button span { font-size: 13px; color: var(--muted); }
+.pslots { display: flex; gap: 20px; align-items: flex-start; }
+.pslot { display: flex; flex-direction: column; gap: 8px; }
+.pslot-box { position: relative; overflow: hidden; display: grid; place-items: center; border: 2px dashed var(--line); color: var(--muted); font-size: 13px; }
+.pslot-box img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.pline { display: flex; gap: 14px; padding: 12px 14px; border-radius: 12px; background: var(--panel-2); max-width: 680px; }
+.pline-head { flex: 0 0 120px; display: flex; flex-direction: column; }
+.pline-head small { font-size: 12px; color: var(--muted); }
+.pline-list { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pline-list input { height: 38px; }
+.pline .pbtn.x { width: 38px; height: 38px; padding: 0; }
+.padd { align-self: flex-start; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px dashed var(--line); background: transparent; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 900px) {
+  .pop-profile, .pop-pedit { width: 100%; height: auto; }
+  .pcard { grid-template-columns: 1fr; clip-path: none; padding: 16px; }
+  .pc-photo, .pc-head, .pc-body, .pc-side { grid-column: 1; grid-row: auto; }
+  .pc-photo { height: 320px; margin: 0; }
+  .pedit-main { flex-direction: column; }
+  .pedit-tabs { flex-direction: row; flex-wrap: wrap; border-right: none; }
 }

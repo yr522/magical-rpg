@@ -15,6 +15,11 @@ const MUTABLE_COLUMNS = [
 
 const pickMutable = (fields) => Object.entries(fields).filter(([k]) => MUTABLE_COLUMNS.includes(k));
 
+// OC 프로필에서 바꿀 수 있는 컬럼. updateProfile만 고친다.
+const PROFILE_COLUMNS = ['name', 'gender', 'title', 'titles', 'profile_text', 'avatar_url', 'cutin_url', 'custom_lines'];
+const JSON_COLUMNS = new Set(['titles', 'custom_lines']);
+const pickProfile = (fields) => Object.entries(fields).filter(([k]) => PROFILE_COLUMNS.includes(k));
+
 // 같은 코드의 아이템을 묶어 [{ code, count }]로 만든다.
 function countItems(codes) {
   const counts = new Map();
@@ -107,6 +112,24 @@ function createPostgresStore(connectionString) {
       if (!entries.length) return;
       const sets = entries.map(([k], i) => `${k} = $${i + 2}`).join(', ');
       await pool.query(`UPDATE characters SET ${sets} WHERE id = $1`, [id, ...entries.map(([, v]) => v)]);
+    },
+    // 프로필 저장. 이름이 다른 캐릭터와 겹치면 아무것도 바꾸지 않고 false.
+    async updateProfile(id, fields) {
+      const entries = pickProfile(fields);
+      if (!entries.length) return true;
+      const sets = entries.map(([k], i) => `${k} = $${i + 2}${JSON_COLUMNS.has(k) ? '::jsonb' : ''}`).join(', ');
+      const values = entries.map(([k, v]) => (JSON_COLUMNS.has(k) ? JSON.stringify(v) : v));
+      try {
+        await pool.query(`UPDATE characters SET ${sets} WHERE id = $1`, [id, ...values]);
+        return true;
+      } catch (err) {
+        if (isUniqueViolation(err)) return false;
+        throw err;
+      }
+    },
+    async isNameTaken(name, exceptId) {
+      const { rows } = await pool.query('SELECT 1 FROM characters WHERE lower(name) = lower($1) AND id <> $2', [name, exceptId || 0]);
+      return rows.length > 0;
     },
     async addItems(ownerId, list, client = pool) {
       if (!list.length) return;
@@ -268,6 +291,17 @@ function createFileStore(filePath) {
       if (!row) return;
       for (const [k, v] of pickMutable(fields)) row[k] = v;
       save();
+    },
+    async updateProfile(id, fields) {
+      const row = data.characters.find((c) => c.id === id);
+      if (!row) return false;
+      if (fields.name && data.characters.some((c) => c.id !== id && lower(c.name) === lower(fields.name))) return false;
+      for (const [k, v] of pickProfile(fields)) row[k] = v;
+      save();
+      return true;
+    },
+    async isNameTaken(name, exceptId) {
+      return data.characters.some((c) => c.id !== exceptId && lower(c.name) === lower(name));
     },
     async addItems(ownerId, list, { skipSave = false } = {}) {
       if (!list.length) return;

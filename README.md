@@ -56,6 +56,10 @@
 | 새 장비 (임시) | 별꽃 머리핀(머리장식, MAG+1 LUK+1) · 가죽 부츠(신발, AGI+2), 본부 상점에서 판매 | `items.json`, `shops.json` |
 | 판매가 표시 | 상점이 없는 곳에서는 본부 상점 기준으로 보여 준다 | `server/index.js`의 `inventoryView` |
 | 아이템 그림 | 지금은 이모지. 나중에 그림으로 바꿀 수 있다 | `items.json`의 `icon` |
+| 프로필 사진 저장 | 브라우저에서 줄인 그림(프사 320×320, 컷인 280×560 JPEG)을 DB에 바로 저장. 한 장 최대 300KB. (기획서의 Supabase 파일 저장소는 나중에) | `public/app.js`의 `resizeImage`, `server/game.js`의 `validateProfile` |
+| 칭호 | 처음: [견습 계약자], 첫 토벌 승리: [첫 토벌의 증인] | `character.json`의 `profile.titles` |
+| 대사 프리셋 | 상황 7가지(전투 시작 · 공격 · 스킬 · 다침 · 회복받음 · 쓰러짐 · 승리), 상황마다 3개, 한 줄 40자. 스킬은 스킬마다 따로가 아니라 하나로 묶음 | `character.json`의 `profile` |
+| OC 설정 글 | 2000자까지 | `character.json`의 `profile.textMax` |
 
 **덩굴 포식자 장비 드롭 확률 (한 번 잡을 때 각각 따로 굴림)**
 

@@ -191,3 +191,34 @@ test('다른 사람 캐릭터는 고르거나 지울 수 없다', async () => {
   assert.ok((await thief.call('char:select', { id: a.character.id })).error);
   assert.ok((await thief.call('char:delete', { id: a.character.id })).error);
 });
+
+test('OC 프로필: 이름 중복 확인, 칭호 · 성별 · 설정 · 사진 두 장 · 대사 프리셋 저장', async () => {
+  const s = await client();
+  await s.call('auth:register', { nickname: '프로필러', password: 'pass1234' });
+  const a = await s.call('char:create', { name: '프로필가', gender: 'girl', element: 'light', classId: 'attacker', godId: 'god_mag' });
+  assert.ok(a.ok, a.error);
+  await s.call('char:create', { name: '이미있음', gender: 'boy', element: 'water', classId: 'guardian', godId: 'god_vit' });
+  await s.call('char:select', { id: a.character.id });
+
+  assert.strictEqual((await s.call('profile:checkName', { name: '이미있음' })).available, false);
+  assert.strictEqual((await s.call('profile:checkName', { name: '새이름' })).available, true);
+  assert.match((await s.call('profile:update', { name: '이미있음' })).error, /이미/);
+
+  // 커스텀 사진은 두 장 다 있어야 한다.
+  const img = 'data:image/jpeg;base64,AAAA';
+  assert.match((await s.call('profile:update', { photo: { avatar: img } })).error, /두 장/);
+  assert.match((await s.call('profile:update', { title: '없는 칭호' })).error, /얻은 칭호/);
+  const lines = { attack: ['간다!', '받아라!'], win: ['오늘도 무사해.'] };
+  const res = await s.call('profile:update', { name: '새이름', gender: 'boy', title: '견습 계약자', text: '별을 좋아한다.', photo: { avatar: img, cutin: img }, lines });
+  assert.ok(res.ok, res.error);
+  assert.strictEqual(res.character.name, '새이름');
+  assert.strictEqual(res.character.gender, 'boy');
+  assert.strictEqual(res.character.cutinUrl, img);
+  assert.deepStrictEqual(res.character.customLines, lines);
+  assert.match((await s.call('profile:update', { lines: { attack: ['1', '2', '3', '4'] } })).error, /3개/);
+
+  const view = await s.call('profile:view', { id: a.character.id });
+  assert.strictEqual(view.profile.text, '별을 좋아한다.');
+  assert.strictEqual(view.profile.equipment.weapon.name, '견습 마법봉');
+  assert.strictEqual(view.profile.mine, true);
+});

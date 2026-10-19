@@ -405,7 +405,7 @@
     $('players').replaceChildren(...players.map((p) => el('li', {}, [
       el('span', { class: 'lv', text: `Lv.${p.level} ` }),
       p.title ? el('span', { style: 'color:#f2c97a', text: `[${p.title}] ` }) : null,
-      el('span', { class: p.id === meId ? 'me' : '', text: p.name }),
+      el('button', { type: 'button', class: `pname ${p.id === meId ? 'me' : ''}`, text: p.name, title: `${p.name}의 프로필 보기`, onclick: () => openProfile(p.id) }),
       p.inBattle ? el('span', { class: 'dim', text: ' · 전투 중' }) : null,
       p.away ? el('span', { class: 'dim', text: ' · 자리 비움' }) : null,
     ])));
@@ -493,7 +493,8 @@
     renderBattle();
   });
 
-  socket.on('battle:log', ({ text }) => addBattleLog(text));
+  // 첫 전투 화면이 오기 전에 온 기록은 버린다 (첫 화면에 지금까지의 기록이 다 들어 있다).
+  socket.on('battle:log', ({ text }) => { if (state.battle) addBattleLog(text); });
 
   socket.on('battle:end', (data) => {
     setBattleMode(false);
@@ -639,6 +640,8 @@
       lines.push(`경험치 +${data.exp}`, `골드 +${data.gold}`);
       if (!data.items.length) lines.push('획득한 아이템 없음');
       if (data.levelUp) lines.push(`레벨 업! Lv.${c.level} — 스탯 포인트 +${data.levelUp * 3} (스테이터스에서 분배)`);
+      if (data.newTitles?.length) lines.push(`새 칭호: ${data.newTitles.map((t) => `[${t}]`).join(' ')} (프로필 편집에서 달 수 있어요)`);
+      if (data.bagFull) lines.push('가방이 가득 차서 일부 아이템을 가져오지 못했다.');
     } else if (data.result === 'defeat') {
       title = '패배…';
       cls = 'defeat';
@@ -700,14 +703,14 @@
       ava,
       el('span', { class: 'body' }, [
         el('span', { class: 'tag', text: { global: '[서버]', battle: '[전투]' }[msg.channel] || '[지역]' }),
-        el('span', { class: 'name', text: `${msg.from.name}:` }),
+        el('button', { type: 'button', class: 'name', text: `${msg.from.name}:`, title: `${msg.from.name}의 프로필 보기`, onclick: () => openProfile(msg.from.id) }),
         el('span', { class: 'text', text: msg.text }),
       ]),
     ]));
-    if (msg.channel === 'battle' && state.battle) {
-      // 전투 중 채팅은 컷 옆 말풍선으로도 5초간 띄운다.
+    if (msg.channel === 'battle') {
+      // 전투 중 채팅(대사 프리셋 포함)은 컷 옆 말풍선으로도 5초간 띄운다.
       state.bubbles.set(msg.from.id, { text: msg.text, until: Date.now() + 5000 });
-      renderCuts();
+      if (state.battle) renderCuts();
       setTimeout(() => { if (state.battle) renderCuts(); }, 5100);
     }
   }
@@ -750,7 +753,7 @@
       renderCharacterInfo();
     },
     profile() {
-      toast('OC 프로필은 준비 중이에요.');
+      openProfile();
     },
     community() {
       toast('파티 · 친구는 준비 중이에요.');
@@ -1032,6 +1035,252 @@
         el('p', { class: 'bag-foot' }, [el('span', { text: '상점은 일반 등급 장비만 팔아요.' })]),
       ]),
     ]), 'pop-shop');
+  }
+
+  // ---------- OC 프로필 창 ----------
+  // 보기: 가로 카드 (왼쪽 반신 컷인 / 가운데 이름 · 칭호 · Lv · 설정 글 / 오른쪽 관계 · 장비 6칸)
+  async function openProfile(id) {
+    const res = await request('profile:view', { id });
+    if (res.error) return toast(res.error);
+    renderProfile(res.profile);
+  }
+
+  function renderProfile(pf) {
+    const el0 = (state.options.elements.find((e) => e.id === pf.elementId)) || {};
+    const tip = el('div', { class: 'eq-tip hidden', role: 'tooltip' });
+    const showTip = (it) => {
+      tip.replaceChildren(el('b', { style: `color:${it.color}`, text: it.name }), el('span', { text: `${it.slotName} · ${it.gradeName}` }), el('span', { class: 'tstats', text: statText(it.stats) }));
+      tip.style.borderColor = it.color;
+      tip.classList.remove('hidden');
+    };
+    const hideTip = () => tip.classList.add('hidden');
+    const equipCells = pf.slots.map((sl) => {
+      const it = pf.equipment[sl.id];
+      if (!it) return el('span', { class: 'cell empty', title: `${sl.name} (빈 칸)`, 'aria-label': `${sl.name} (빈 칸)` });
+      const b = itemCell(it, { onclick: () => showTip(it) });
+      b.addEventListener('mouseenter', () => showTip(it));
+      b.addEventListener('mouseleave', hideTip);
+      b.addEventListener('focus', () => showTip(it));
+      b.addEventListener('blur', hideTip);
+      return b;
+    });
+    const rels = pf.relations || [];
+    const relRows = Array.from({ length: Math.max(5, rels.length) }, (_, i) => rels[i] || null).map((r) => (r
+      ? el('button', { type: 'button', class: 'rel-row', title: `${r.name}의 프로필 보기`, onclick: () => openProfile(r.id) }, [el('b', { text: r.name }), el('span', { text: r.relation })])
+      : el('span', { class: 'rel-row empty' })));
+    const buttons = pf.mine
+      ? [actBtn('프로필 편집', () => openProfileEdit(), true)]
+      : profileSocialButtons(pf);
+    openModal(el('div', { class: 'pcard' }, [
+      el('div', { class: 'pc-photo', role: 'img', 'aria-label': `${pf.name} 컷인 사진` }, [
+        photo(pf.cutinUrl, 'half'),
+        pf.cutinUrl ? null : el('span', { class: 'pc-default', text: '기본 프사 사용 중' }),
+      ]),
+      el('div', { class: 'pc-head' }, [
+        ornament('pc-orn'),
+        el('div', { class: 'pc-namebox' }, [
+          el('h2', { class: 'pc-name', text: pf.name }),
+          el('div', {}, [
+            el('span', { class: 'pc-title', text: pf.title ? `[${pf.title}]` : '' }),
+            el('div', { class: 'pc-line' }, [
+              el('span', { class: 'pc-lv', text: `Lv.${pf.level}` }),
+              el('span', { class: 'pc-el', role: 'img', 'aria-label': `${pf.element} 속성`, title: `${pf.element} 속성`, style: `border-color:${el0.color || 'var(--line)'}`, text: el0.icon || '◆' }),
+              el('span', { class: 'pc-cls', text: pf.cls }),
+              el('span', { class: 'pc-gender', text: `· ${pf.gender}` }),
+            ]),
+          ]),
+        ]),
+      ]),
+      el('div', { class: 'pc-body' }, [
+        el('div', { class: 'pc-text', text: pf.text || (pf.mine ? '아직 OC 설정이 비어 있어요. [프로필 편집]에서 적어 보세요.' : '아직 OC 설정이 없어요.') }),
+        el('div', { class: 'pc-buttons' }, buttons),
+      ]),
+      el('div', { class: 'pc-side' }, [
+        el('div', { class: 'rel-list', 'aria-label': '관계' }, relRows),
+        el('div', { class: 'pc-equip' }, [el('h3', { text: '장비' }), el('div', { class: 'pc-eq-grid' }, equipCells), tip]),
+      ]),
+    ]), 'pop-profile');
+  }
+  // 친구 · 관계 버튼은 친구 기능과 함께 채운다.
+  let profileSocialButtons = () => [];
+
+  // 편집: 왼쪽 탭(기본 정보 · 사진 · OC 설정 · 관계 · 대사 프리셋), 아래 [취소] [저장]
+  function openProfileEdit(tab = 'basic') {
+    const c = state.character;
+    const rules = state.options.profile;
+    const d = {
+      name: c.name, nameOk: true, nameMsg: '서버 안의 다른 캐릭터와 같은 이름은 쓸 수 없어요.',
+      title: c.title, gender: c.gender, text: c.profileText,
+      photoMode: c.avatarUrl && c.cutinUrl ? 'custom' : 'default', avatar: c.avatarUrl, cutin: c.cutinUrl,
+      lines: Object.fromEntries(rules.lineSituations.map((s) => [s.id, [...(c.customLines[s.id] || [])]])),
+    };
+    const content = el('div', { class: 'pedit-body' });
+    const status = el('span', { class: 'pedit-status', role: 'status' });
+    const saveBtn = actBtn('저장', save, true);
+    const tabs = [['basic', '기본 정보'], ['photo', '사진'], ['text', 'OC 설정'], ['rel', '관계'], ['lines', '대사 프리셋']];
+    const nav = el('nav', { class: 'pedit-tabs', 'aria-label': '편집 항목' });
+
+    function blockers() {
+      if (d.photoMode === 'custom' && !(d.avatar && d.cutin)) return '사진 탭: 커스텀 사진 두 장을 모두 올려야 해요.';
+      if (d.name.trim() !== c.name && !d.nameOk) return '기본 정보 탭: 이름 중복 확인이 필요해요.';
+      return '';
+    }
+    function refreshFooter() {
+      const b = blockers();
+      status.textContent = b;
+      saveBtn.disabled = Boolean(b);
+    }
+    function draw() {
+      nav.replaceChildren(...tabs.map(([k, label]) => el('button', { type: 'button', class: k === tab ? 'on' : '', 'aria-current': k === tab ? 'page' : 'false', text: label, onclick: () => { tab = k; draw(); } })));
+      content.replaceChildren(...(PANELS[tab]() || []));
+      refreshFooter();
+    }
+    const field = (label, control, help) => el('div', { class: 'pfield' }, [el('label', { text: label }), control, help ? el('p', { class: 'phelp', text: help }) : null]);
+    const PANELS = {
+      basic() {
+        const msg = el('p', { class: `phelp ${d.nameOk === false ? 'bad' : ''}`, role: 'status', text: d.nameMsg });
+        const input = el('input', { value: d.name, maxlength: '12', autocomplete: 'off', 'aria-label': '이름' });
+        input.addEventListener('input', () => {
+          d.name = input.value;
+          d.nameOk = d.name.trim() === c.name;
+          d.nameMsg = d.nameOk ? '서버 안의 다른 캐릭터와 같은 이름은 쓸 수 없어요.' : '이름을 바꾸려면 중복 확인을 해 주세요.';
+          msg.textContent = d.nameMsg;
+          msg.className = 'phelp';
+          refreshFooter();
+        });
+        const check = actBtn('중복 확인', async () => {
+          const res = await request('profile:checkName', { name: d.name.trim() });
+          d.nameOk = Boolean(res.available) || d.name.trim() === c.name;
+          d.nameMsg = res.error || (d.name.trim() === c.name ? '지금 쓰는 이름이에요.' : res.available ? '쓸 수 있는 이름이에요.' : res.reason);
+          msg.textContent = d.nameMsg;
+          msg.className = `phelp ${d.nameOk ? 'good' : 'bad'}`;
+          refreshFooter();
+        });
+        const title = el('select', { 'aria-label': '칭호' }, c.titles.map((t) => el('option', { value: t, text: t })));
+        title.value = d.title;
+        title.addEventListener('change', () => { d.title = title.value; });
+        const genders = el('div', { class: 'ptoggle', role: 'group', 'aria-label': '성별' }, state.options.genders.map((g) => el('button', {
+          type: 'button', class: d.gender === g.id ? 'on' : '', 'aria-pressed': String(d.gender === g.id), text: g.name, onclick: () => { d.gender = g.id; draw(); },
+        })));
+        return [
+          el('div', { class: 'pfield' }, [el('label', { text: '이름' }), el('div', { class: 'prow' }, [input, check]), msg]),
+          field('칭호', title, '얻은 칭호 중에서 골라 달 수 있어요.'),
+          field('성별', genders),
+        ];
+      },
+      photo() {
+        const modes = el('div', { class: 'pmodes', role: 'radiogroup', 'aria-label': '프로필 사진 종류' }, [
+          ['default', '기본 프사 쓰기', '게임에 있는 기본 그림을 써요.'],
+          ['custom', '커스텀 사진 쓰기', '사진 두 장을 직접 올려요.'],
+        ].map(([k, label, desc]) => el('button', { type: 'button', role: 'radio', 'aria-checked': String(d.photoMode === k), class: d.photoMode === k ? 'on' : '', onclick: () => { d.photoMode = k; draw(); } }, [el('b', { text: label }), el('span', { text: desc })])));
+        if (d.photoMode !== 'custom') return [modes];
+        const slot = (key, label, desc, w, h, round) => {
+          const pick = el('input', { type: 'file', accept: 'image/*', class: 'hidden' });
+          pick.addEventListener('change', async () => {
+            const file = pick.files[0];
+            if (!file) return;
+            try {
+              d[key] = await resizeImage(file, w * 2, h * 2);
+              draw();
+            } catch {
+              toast('사진을 읽지 못했어요. 다른 사진을 골라 주세요.');
+            }
+          });
+          return el('div', { class: 'pslot', style: `width:${w}px` }, [
+            el('b', { text: label }),
+            el('div', { class: 'pslot-box', role: 'img', 'aria-label': `${label} 미리보기`, style: `width:${w}px;height:${h}px;border-radius:${round}` }, [d[key] ? el('img', { src: d[key], alt: '' }) : el('span', { text: '아직 없음' })]),
+            el('span', { class: 'phelp', text: desc }),
+            actBtn(d[key] ? '다른 사진으로 바꾸기' : '사진 고르기', () => pick.click()),
+            pick,
+          ]);
+        };
+        const both = d.avatar && d.cutin;
+        return [modes, el('div', { class: 'pslots' }, [
+          slot('avatar', '① 프로필 사진 (정사각형)', '프로필 카드, 채팅, 3~4명 전투에 쓰여요.', 160, 160, '50%'),
+          slot('cutin', '② 컷인 사진 (세로로 긴 반신)', '1~2명 전투와 프로필 창에 크게 보여요. 세로 1 : 2.', 140, 280, '12px'),
+        ]), el('p', { class: `phelp ${both ? 'good' : 'warn'}`, text: both ? '두 장 모두 올렸어요.' : '커스텀 사진은 두 장을 모두 올려야 저장할 수 있어요.' })];
+      },
+      text() {
+        const area = el('textarea', { maxlength: String(rules.textMax), 'aria-label': 'OC 설정' });
+        area.value = d.text;
+        const count = el('p', { class: 'phelp right', text: `${d.text.length} / ${rules.textMax}자` });
+        area.addEventListener('input', () => { d.text = area.value; count.textContent = `${d.text.length} / ${rules.textMax}자`; });
+        return [el('label', { class: 'plabel', text: 'OC 설정 — 외형, 성격, 과거, 소개 등 자유롭게' }), area, count];
+      },
+      rel() {
+        return profileRelationPanel ? profileRelationPanel() : [el('p', { class: 'phelp', text: '관계는 친구 기능과 함께 열려요.' })];
+      },
+      lines() {
+        return [
+          el('p', { class: 'phelp', text: `전투 중 그 상황이 되면 내 말풍선에 자동으로 떠요. 상황마다 최대 ${rules.linesPerSituation}개, 여러 개면 그중 하나가 무작위로 나와요. 비워 두면 말없이 지나가요.` }),
+          ...rules.lineSituations.map((sit) => {
+            const list = d.lines[sit.id];
+            return el('div', { class: 'pline' }, [
+              el('div', { class: 'pline-head' }, [el('b', { text: sit.name }), el('small', { text: `${list.length} / ${rules.linesPerSituation}` })]),
+              el('div', { class: 'pline-list' }, [
+                ...list.map((text, i) => {
+                  const inp = el('input', { value: text, maxlength: String(rules.lineMax), autocomplete: 'off', 'aria-label': `${sit.name} 대사` });
+                  inp.addEventListener('input', () => { list[i] = inp.value; });
+                  return el('div', { class: 'prow' }, [inp, el('button', { type: 'button', class: 'pbtn x', 'aria-label': '이 대사 지우기', text: '×', onclick: () => { list.splice(i, 1); draw(); } })]);
+                }),
+                list.length < rules.linesPerSituation ? el('button', { type: 'button', class: 'padd', text: '+ 대사 추가', onclick: () => { list.push(''); draw(); } }) : null,
+              ]),
+            ]);
+          }),
+        ];
+      },
+    };
+
+    async function save() {
+      if (blockers()) return;
+      const payload = {
+        name: d.name.trim(), title: d.title, gender: d.gender, text: d.text,
+        photo: d.photoMode === 'custom' ? { avatar: d.avatar, cutin: d.cutin } : 'default',
+        lines: Object.fromEntries(Object.entries(d.lines).map(([k, l]) => [k, l.map((x) => x.trim()).filter(Boolean)])),
+      };
+      saveBtn.disabled = true;
+      const res = await request('profile:update', payload);
+      if (res.error) {
+        saveBtn.disabled = false;
+        return toast(res.error);
+      }
+      state.character = res.character;
+      renderProfileCard();
+      openProfile();
+    }
+
+    openModal(el('div', { class: 'pedit' }, [
+      el('header', { class: 'pedit-head' }, [el('h2', { text: '프로필 편집' })]),
+      el('div', { class: 'pedit-main' }, [nav, content]),
+      el('footer', { class: 'pedit-foot' }, [status, actBtn('취소', () => openProfile()), saveBtn]),
+    ]), 'pop-pedit');
+    draw();
+  }
+  let profileRelationPanel = null;
+
+  // 사진을 브라우저에서 줄여(가운데를 잘라) JPEG 글자로 바꾼다. 서버에는 이 작은 그림만 간다.
+  function resizeImage(file, w, h) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const scale = Math.max(w / img.width, h / img.height);
+          const sw = w / scale;
+          const sh = h / scale;
+          // 가로는 가운데, 세로는 위(얼굴) 기준으로 자른다.
+          canvas.getContext('2d').drawImage(img, (img.width - sw) / 2, 0, sw, sh, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
   }
 
   for (const btn of document.querySelectorAll('[data-menu]')) {

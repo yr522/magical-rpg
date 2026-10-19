@@ -109,6 +109,10 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
     onLog(battle, text) {
       io.to(battleRoom(battle.id)).emit('battle:log', { text });
     },
+    // 대사 프리셋: 전투 채팅으로 보내면 화면에서 그 사람 컷 옆 말풍선으로 뜬다.
+    onLine(battle, p, text) {
+      io.to(battleRoom(battle.id)).emit('chat', { channel: 'battle', from: { id: p.id, name: p.name, avatarUrl: p.avatarUrl }, text, at: Date.now(), preset: true });
+    },
     onUpdate(battle) {
       for (const p of battle.party.values()) online.get(p.id)?.socket?.emit('battle:state', battle.view(p.id));
     },
@@ -158,6 +162,13 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
         for (const d of rolled) if (game.bagCellsAfter(owned, [...drops, d]) <= BAG_SIZE) drops.push(d);
         await store.addItems(row.id, drops);
         Object.assign(outcome, { exp, gold, levelUp: levels, items: drops.map((d) => game.itemView(d)), bagFull: drops.length < rolled.length });
+        // 첫 토벌 승리 칭호
+        const newTitles = game.titlesFor('firstVictory').filter((t) => !game.titlesOf(row).includes(t));
+        if (newTitles.length) {
+          row.titles = [...(Array.isArray(row.titles) ? row.titles : []), ...newTitles];
+          await store.updateProfile(row.id, { titles: row.titles });
+          outcome.newTitles = newTitles;
+        }
       } else {
         // 전멸: 보유 골드 10% 손실, 본부로 귀환 (본부에서 HP/MP 회복).
         const lost = Math.floor(row.gold * DEATH_GOLD_PENALTY);
@@ -258,6 +269,31 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
     const rows = await store.listItemRows(entry.row.id);
     if (id !== undefined) return rows.find((it) => it.id === Number(id)) || null;
     return rows.find((it) => it.code === code && !it.equipped) || null;
+  }
+
+  // 다른 사람에게도 보이는 OC 프로필 (관계는 친구 기능에서 채운다)
+  function profileView(row, worn, viewerId) {
+    const opt = (list, id) => (game.characterData[list].find((o) => o.id === id) || {}).name || id;
+    return {
+      id: row.id,
+      mine: row.id === viewerId,
+      name: row.name,
+      level: row.level,
+      title: game.titleOf(row),
+      gender: opt('genders', row.gender),
+      element: opt('elements', row.element),
+      elementId: row.element,
+      cls: opt('classes', row.class),
+      text: row.profile_text || '',
+      avatarUrl: row.avatar_url || null,
+      cutinUrl: row.cutin_url || null,
+      equipment: Object.fromEntries([...game.slots.keys()].map((slot) => {
+        const it = worn.find((w) => w.slot === slot);
+        return [slot, it ? game.itemView(it) : null];
+      })),
+      slots: [...game.slots.values()].map((s) => ({ id: s.id, name: s.name })),
+      relations: [],
+    };
   }
 
   function leaveBattle(entry, reason) {
@@ -403,8 +439,8 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
     });
 
     on('char:options', async (_payload, reply) => {
-      const { genders, elements, classes, gods, baseStats } = game.characterData;
-      reply({ ok: true, options: { genders, elements, classes, gods, baseStats } });
+      const { genders, elements, classes, gods, baseStats, profile } = game.characterData;
+      reply({ ok: true, options: { genders, elements, classes, gods, baseStats, profile } });
     });
 
     on('char:list', async (_payload, reply) => {
@@ -494,6 +530,38 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
         healed,
       });
       sendPlayers(to);
+    });
+
+    // ---------- OC 프로필 ----------
+    on('profile:view', async ({ id }, reply) => {
+      const entry = currentEntry(socket);
+      if (!entry) return reply({ error: '캐릭터를 먼저 골라 주세요.' });
+      const targetId = id == null ? entry.row.id : Number(id);
+      const row = online.get(targetId)?.row || (await store.getCharacter(targetId));
+      if (!row) return reply({ error: '그런 캐릭터가 없습니다.' });
+      const worn = (await store.listItemRows(row.id)).filter((it) => it.equipped && game.items.has(it.code));
+      reply({ ok: true, profile: profileView(row, worn, entry.row.id) });
+    });
+
+    on('profile:checkName', async ({ name }, reply) => {
+      const entry = currentEntry(socket);
+      if (!entry) return reply({ error: '캐릭터를 먼저 골라 주세요.' });
+      const check = game.validateProfile({ name }, entry.row);
+      if (check.error) return reply({ ok: true, available: false, reason: check.error });
+      const taken = check.fields.name && (await store.isNameTaken(check.fields.name, entry.row.id));
+      reply({ ok: true, available: !taken, reason: taken ? '이미 서버에 있는 이름이에요. 다른 이름을 골라 주세요.' : '' });
+    });
+
+    on('profile:update', async (input, reply) => {
+      const entry = currentEntry(socket);
+      if (!entry) return reply({ error: '캐릭터를 먼저 골라 주세요.' });
+      const { error, fields } = game.validateProfile(input, entry.row);
+      if (error) return reply({ error });
+      if (!(await store.updateProfile(entry.row.id, fields))) return reply({ error: '이미 서버에 있는 이름이에요. 다른 이름을 골라 주세요.' });
+      const renamed = fields.name && fields.name !== entry.row.name;
+      Object.assign(entry.row, fields);
+      if (renamed) sendPlayers(entry.row.location_id);
+      reply({ ok: true, character: game.characterView(entry.row) });
     });
 
     on('look', async (_payload, reply) => {
