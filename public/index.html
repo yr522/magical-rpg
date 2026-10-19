@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>균열의 계약자</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -62,51 +64,88 @@
     </div>
   </section>
 
-  <!-- 필드 -->
+  <!-- 게임 화면 (필드 · 전투 공통 틀). 배치는 docs/ui-design.md -->
   <section id="screen-game" class="screen hidden">
-    <header class="statusbar" id="statusbar"></header>
-    <main class="field">
-      <div class="field-main">
-        <div id="field-view" class="field-view">
-          <div id="field-log" class="log"></div>
-          <div id="actions" class="actions"></div>
+    <div class="game">
+      <!-- 위: 맵 전경 / 전투 전경 -->
+      <section class="scene" id="scene" aria-label="전경">
+        <div class="ground" id="ground"></div>
+        <h1 class="zone-title" id="zone-title"></h1>
+
+        <!-- 필드 전용 -->
+        <button type="button" class="people-btn field-only" id="people-btn" aria-expanded="false" aria-label="이곳의 계약자 목록"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M16 14.2c3 .2 5.5 2.4 5.5 5.8"></path></svg><span id="people-count">0</span></button>
+        <div class="people-panel hidden" id="people-panel">
+          <p>이곳의 계약자</p>
+          <ul id="players"></ul>
         </div>
-        <!-- 전투 화면: 위에 적, 가운데 메뉴, 좌우에 참가자 프사 2명씩 -->
-        <div id="battle-view" class="battle-view hidden">
-          <div id="enemy" class="enemy"></div>
-          <div class="battle-grid">
-            <div class="slots" id="slots-left"></div>
-            <div class="battle-menu">
-              <p id="turn-info" class="turn-info"></p>
-              <div id="battle-buttons" class="battle-buttons"></div>
-            </div>
-            <div class="slots" id="slots-right"></div>
+
+        <!-- 전투 전용 -->
+        <div class="battle-only">
+          <div class="turn-badge" id="turn-badge"></div>
+          <div class="enemy" id="enemy">
+            <p class="enemy-name" id="enemy-name"></p>
+            <div class="enemy-bar" role="img" id="enemy-bar"><span></span></div>
           </div>
-          <div id="battle-log" class="log battle-log"></div>
+          <svg class="enemy-figure" aria-hidden="true" viewBox="0 0 260 200">
+            <ellipse cx="130" cy="190" rx="110" ry="10" fill="rgba(0,0,0,0.45)"></ellipse>
+            <path d="M130 30c-38 0-62 34-62 78 0 34 14 64 30 82h64c16-18 30-48 30-82 0-44-24-78-62-78z" fill="#162a1a" stroke="#3e7a4f" stroke-width="3"></path>
+            <path d="M78 96c-30-6-48 10-60 34M182 96c30-6 48 10 60 34M96 60c-14-20-12-38 2-52M164 60c14-20 12-38-2-52" fill="none" stroke="#3e7a4f" stroke-width="5" stroke-linecap="round"></path>
+            <circle cx="130" cy="104" r="16" fill="#7dff9a" opacity="0.85"></circle>
+          </svg>
+          <div id="cuts"></div>
         </div>
+
+        <!-- 바닥 글 상자: 묘사 · 대사 · 선택지 (전투 중에는 전투 기록 최신 한 줄) -->
+        <div class="caption hidden" id="caption">
+          <div class="caption-text"><p id="caption-text"></p></div>
+          <div class="caption-choices" id="caption-choices"></div>
+          <button type="button" class="caption-close" id="caption-close" aria-label="글 닫기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+        </div>
+      </section>
+
+      <!-- 아래 줄: 채팅 · 프로필 카드 + 행동 버튼 · 아이콘 메뉴 -->
+      <div class="bottom">
+        <section class="chat" aria-label="채팅">
+          <div class="chat-tabs" id="chat-tabs"></div>
+          <div class="chat-box">
+            <ul id="chat-log" class="chat-log"></ul>
+            <form id="chat-form" class="chat-form">
+              <select name="channel" aria-label="보낼 채널">
+                <option value="zone">지역</option>
+                <option value="global">서버</option>
+              </select>
+              <input name="text" maxlength="200" placeholder="메시지 입력" autocomplete="off" aria-label="메시지">
+              <button type="submit">전송</button>
+            </form>
+          </div>
+        </section>
+
+        <div class="card-menu">
+          <section class="profile-card" id="profile-card" aria-label="내 캐릭터"></section>
+          <nav class="actions" id="actions" aria-label="행동"></nav>
+        </div>
+
+        <nav class="icon-menu" aria-label="메뉴">
+          <button type="button" class="icon-btn" data-menu="inventory" aria-label="인벤토리" title="인벤토리"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1.2 12H6.2z"></path><path d="M9 8V6a3 3 0 0 1 6 0v2"></path></svg></button>
+          <button type="button" class="icon-btn" data-menu="status" aria-label="스테이터스" title="스테이터스"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V11"></path><path d="M12 20V4"></path><path d="M19 20v-6"></path></svg></button>
+          <button type="button" class="icon-btn" data-menu="profile" aria-label="프로필" title="프로필"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="9" cy="11" r="2.2"></circle><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4"></path><path d="M14.5 10h3.5M14.5 13.5h3.5"></path></svg></button>
+          <button type="button" class="icon-btn" data-menu="community" aria-label="파티 · 친구" title="파티 · 친구"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M16 14.2c3 .2 5.5 2.4 5.5 5.8"></path></svg></button>
+          <button type="button" class="icon-btn" id="settings-btn" aria-label="설정" title="설정" aria-expanded="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
+          <div class="settings-pop hidden" id="settings-pop" role="group" aria-label="설정 메뉴">
+            <button type="button" class="icon-btn" disabled aria-label="음향 조절 (준비 중)" title="음향 조절 (준비 중)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"></path><path d="M16.5 8.5a5 5 0 0 1 0 7"></path></svg></button>
+            <button type="button" class="icon-btn" data-menu="theme" aria-label="테마 바꾸기" title="테마 바꾸기"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"></path></svg></button>
+            <button type="button" class="icon-btn" data-menu="switch" aria-label="캐릭터 변경" title="캐릭터 변경"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h11l-3-3"></path><path d="M17 17H6l3 3"></path></svg></button>
+            <button type="button" class="icon-btn" data-menu="logout" aria-label="로그아웃" title="로그아웃"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"></path><path d="M10 16l-4-4 4-4"></path><path d="M6 12h10"></path></svg></button>
+          </div>
+        </nav>
       </div>
-      <aside class="field-side">
-        <h3>이곳의 계약자</h3>
-        <ul id="players" class="players"></ul>
-        <h3>채팅</h3>
-        <ul id="chat-log" class="chat-log"></ul>
-        <form id="chat-form" class="chat-form">
-          <select name="channel" aria-label="채널">
-            <option value="zone">지역</option>
-            <option value="global">전체</option>
-          </select>
-          <input name="text" maxlength="200" placeholder="메시지 입력" autocomplete="off">
-          <button type="submit">전송</button>
-        </form>
-      </aside>
-    </main>
-    <nav class="bottom-menu">
-      <button data-menu="character">캐릭터</button>
-      <button data-menu="inventory">인벤토리</button>
-      <button data-menu="map">지도</button>
-      <button data-menu="switch">캐릭터 변경</button>
-      <button data-menu="logout">로그아웃</button>
-    </nav>
+
+      <footer class="statusline">
+        <span>v.1</span>
+        <span class="conn-dot" id="conn-dot" role="img" aria-label="서버 연결 상태"></span>
+        <span>· <span id="online-count">0</span>명 접속 중</span>
+      </footer>
+    </div>
   </section>
 
   <div id="modal" class="modal hidden" role="dialog" aria-modal="true">

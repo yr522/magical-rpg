@@ -43,7 +43,8 @@
 | 공격력 / 마법 공격력 / 방어력 | STR×2+레벨 / MAG×2+레벨 / VIT×1.5+레벨 | `server/game.js`의 `combatStats` |
 | 필요 경험치 | 50 × 현재 레벨 | `server/data/character.json`의 `growth` |
 | HP 회복 | 본부에 들어가면 전체 회복 | `server/index.js`의 `move` |
-| 방어 | 그 턴에 받는 피해 절반 | `server/battle.js` |
+| 차례 시간 초과 | 자동 공격 (기획자 결정. 화면에 방어 버튼은 없다) | `server/battle.js`의 `nextTurn` |
+| 맵 전경 배경색 | 지역마다 색 | `server/data/map.json`의 `regions[].colors` |
 | 몬스터 · 스킬 · 아이템 · 이벤트 수치 | | `server/data/monsters.json`, `skills.json`, `items.json`, `events.json` |
 | 상점 가격 | 살 때 기준가 ×1.0, 팔 때 ×0.4 | `server/data/shops.json`의 `buyRate` / `sellRate` (상점마다 따로 정할 수 있음) |
 | 장비 기준가 | 등급 배율 × (1 + 0.25 × 추가 옵션 수) | `server/game.js`의 `itemValue` |

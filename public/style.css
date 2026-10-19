@@ -1,4 +1,7 @@
 :root {
+  --title: #f2c97a;
+  --hp: #6fd39b;
+  --mp: #6fa8ff;
   --bg: #0f0e15;
   --panel: #1a1823;
   --panel-2: #23202f;
@@ -17,7 +20,7 @@ html, body { margin: 0; height: 100%; }
 body {
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.6 system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font: 15px/1.55 "Noto Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 }
 h1, h2, h3 { margin: 0 0 .5em; font-weight: 600; }
 h1 { font-size: 1.6rem; color: var(--accent); }
@@ -71,43 +74,6 @@ legend { color: var(--muted); padding: 0 4px; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .avatar.small { width: 24px; height: 24px; font-size: 12px; }
 
-/* 필드 화면 */
-#screen-game { display: flex; flex-direction: column; align-items: stretch; padding: 0; height: 100vh; height: 100dvh; }
-.statusbar {
-  display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 10px 16px;
-  background: var(--panel); border-bottom: 1px solid var(--line); font-size: .9rem;
-}
-.statusbar strong { color: var(--accent); }
-.field { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 320px; }
-.field-main { display: flex; flex-direction: column; min-height: 0; padding: 16px; }
-.field-view, .battle-view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
-.actions button.raid { border-color: var(--danger); color: var(--danger); }
-.log { flex: 1; overflow-y: auto; white-space: pre-wrap; }
-.log .entry { margin: 0 0 10px; }
-.log .place { font-size: 1.1rem; color: var(--accent); font-weight: 600; margin-top: 8px; }
-.log .system { color: var(--system); font-size: .9rem; }
-.log .notice { color: var(--muted); }
-.actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.actions button { background: var(--panel-2); color: var(--text); border-color: var(--line); font-weight: 400; }
-.actions button.move { border-color: var(--accent); }
-
-.field-side { display: flex; flex-direction: column; min-height: 0; padding: 16px; border-left: 1px solid var(--line); background: var(--panel); }
-.players { list-style: none; padding: 0; margin: 0 0 12px; max-height: 30%; overflow-y: auto; }
-.players li { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
-.players .away { color: var(--muted); }
-.chat-log { list-style: none; padding: 0; margin: 0 0 8px; flex: 1; overflow-y: auto; min-height: 120px; }
-.chat-log li { display: flex; gap: 6px; align-items: flex-start; padding: 3px 0; word-break: break-word; }
-.chat-log .name { font-weight: 600; margin-right: 4px; }
-.chat-log .tag { font-size: .75rem; color: var(--muted); margin-right: 4px; }
-.chat-log .global .tag { color: var(--global); }
-.chat-form { display: flex; gap: 6px; }
-.chat-form button { white-space: nowrap; }
-.chat-form select { width: auto; margin: 0; }
-.chat-form input { margin: 0; min-width: 0; }
-
-.bottom-menu { display: flex; gap: 6px; padding: 8px 16px; background: var(--panel); border-top: 1px solid var(--line); overflow-x: auto; }
-.bottom-menu button { flex: 1; background: transparent; color: var(--text); border-color: var(--line); font-weight: 400; white-space: nowrap; }
-
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; justify-content: center; align-items: center; padding: 16px; z-index: 10; }
 .modal-body { max-height: 90vh; overflow-y: auto; }
 .region { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
@@ -118,7 +84,6 @@ legend { color: var(--muted); padding: 0 4px; }
 .toast { bottom: 72px; background: var(--danger); color: #1a0b0e; font-weight: 600; }
 
 /* 인벤토리 · 상점 */
-.actions button.shop { border-color: var(--global); color: var(--global); }
 .item-card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; }
 .item-card .item-name { font-weight: 600; }
 .item-card .item-meta { color: var(--muted); font-size: .85rem; }
@@ -131,65 +96,212 @@ legend { color: var(--muted); padding: 0 4px; }
 .inv-message { color: var(--system); min-height: 1.2em; }
 .modal-body h3 { margin-top: 14px; }
 
-/* 전투 화면 */
-.bar { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
-.bar > span { display: block; height: 100%; background: var(--danger); transition: width .3s; }
-.bar.hp > span { background: #6fd39b; }
-.bar.mp > span { background: #6fa8ff; }
-.enemy { background: var(--panel); border: 1px solid var(--danger); border-radius: 12px; padding: 12px 16px; }
-.enemy .name { font-size: 1.1rem; font-weight: 600; color: var(--danger); }
-.enemy .bar { height: 12px; margin: 6px 0; }
-.battle-grid { display: grid; grid-template-columns: 1fr minmax(180px, 1.2fr) 1fr; gap: 10px; align-items: start; }
-.slots { display: flex; flex-direction: row; gap: 8px; }
-.slot {
-  position: relative; flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line);
-  border-radius: 10px; padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: .85rem;
+
+/* 밝은 테마 (설정 → 테마) */
+body.light {
+  --bg: #f3f0f8; --panel: #ffffff; --panel-2: #ece8f4; --line: #d4cde4;
+  --text: #1d1a28; --muted: #5c5570; --accent: #6b3fd1; --accent-text: #ffffff;
+  --system: #0e6f68; --global: #9a5b00; --title: #9a5b00; --danger: #b4233a;
 }
-.slot.empty { border-style: dashed; color: var(--muted); justify-content: center; min-height: 110px; }
-.slot.turn { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
-.slot.down { opacity: .45; }
-.slot .avatar { width: 48px; height: 48px; }
-.slot .bar { width: 100%; }
-.slot .slot-name { font-weight: 600; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-.slot .status { color: var(--muted); font-size: .75rem; text-align: center; }
-.bubble {
-  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
-  background: var(--text); color: var(--bg); padding: 6px 10px; border-radius: 10px; font-size: .85rem;
-  width: max-content; max-width: 180px; z-index: 2; word-break: break-word;
+
+/* ===== 게임 화면 (필드 · 전투 공통 틀) — docs/ui-design.md ===== */
+#screen-game { padding: 0; align-items: stretch; height: 100vh; height: 100dvh; }
+.game { width: 100%; max-width: 1440px; margin: 0 auto; height: 100%; box-sizing: border-box; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.game button { font-weight: 400; }
+
+/* 위: 전경 (위 : 아래 = 7 : 3) */
+.scene { position: relative; flex: 7 1 0; min-height: 360px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: var(--panel-2); color: #fff; }
+.ground { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; }
+.zone-title {
+  position: absolute; left: 28px; top: 20px; margin: 0; z-index: 2;
+  font: 700 30px/1.3 "Gowun Batang", serif; color: #fff; letter-spacing: .5px;
+  text-shadow: -1.5px -1.5px 0 #120f1c, 1.5px -1.5px 0 #120f1c, -1.5px 1.5px 0 #120f1c, 1.5px 1.5px 0 #120f1c, 0 3px 10px rgba(0,0,0,.6);
 }
-.bubble::after { content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: var(--text); }
-.battle-menu { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
-.turn-info { margin: 0 0 8px; text-align: center; font-weight: 600; }
-.turn-info.mine { color: var(--accent); }
-.battle-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.battle-buttons button { padding: 8px; font-size: .9rem; }
-.battle-buttons button.wide { grid-column: 1 / -1; }
-.battle-buttons .sub { background: var(--panel-2); color: var(--text); border-color: var(--line); font-weight: 400; text-align: left; }
-.battle-buttons .sub small { display: block; color: var(--muted); }
-.battle-log { font-size: .9rem; }
+.people-btn {
+  position: absolute; right: 18px; top: 18px; z-index: 3; height: 44px; padding: 0 14px;
+  display: flex; align-items: center; gap: 8px; border-radius: 22px;
+  border: 1px solid rgba(255,255,255,.55); background: rgba(10,8,18,.55); color: #fff; font-size: 14px;
+}
+.people-panel {
+  position: absolute; right: 18px; top: 72px; z-index: 3; width: 300px; max-height: 230px; overflow-y: auto;
+  padding: 14px 16px; border-radius: 12px; background: rgba(5,4,10,.72); color: #fff;
+}
+.people-panel p { margin: 0 0 8px; font-size: 13px; color: #c9c3dc; }
+.people-panel ul { list-style: none; margin: 0; padding: 0; }
+.people-panel li { padding: 5px 0; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,.1); }
+.people-panel .lv { color: #c9c3dc; }
+.people-panel .me { color: #cdb3ff; }
+.people-panel .dim { color: #9a94b0; font-size: 12px; }
+
+.caption {
+  position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 3;
+  width: min(1040px, calc(100% - 56px)); padding: 0 64px; border-radius: 10px;
+  background: rgba(0,0,0,.62); box-shadow: 0 0 13px 8px rgba(0,0,0,.62);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.5); display: flex; align-items: center; gap: 16px;
+}
+.caption-text { flex: 1; min-width: 0; display: flex; justify-content: center; }
+.caption-text p { margin: 0; padding: 3px 0; max-width: 560px; text-align: center; font-size: 14px; font-weight: 300; white-space: pre-line; }
+.caption-choices { display: flex; gap: 8px; flex: none; }
+.caption-choices:empty { display: none; }
+.caption-choices button { min-height: 32px; margin: 3px 0; padding: 0 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,.8); background: rgba(255,255,255,.12); color: #fff; font-size: 14px; }
+.caption-close { flex: none; width: 30px; height: 30px; padding: 0; border-radius: 15px; border: none; background: transparent; color: #fff; display: grid; place-items: center; }
+
+/* 전투 전경 */
+.battle-only { display: none; }
+.in-battle .battle-only { display: block; }
+.in-battle .field-only, .in-battle .people-panel { display: none; }
+.in-battle .caption { width: min(720px, calc(100% - 440px)); padding: 0 40px; }
+.in-battle .caption-close { display: none; }
+.turn-badge {
+  position: absolute; right: 18px; top: 18px; z-index: 3; height: 44px; padding: 0 16px;
+  display: flex; align-items: center; gap: 8px; border-radius: 22px;
+  border: 1px solid rgba(255,255,255,.55); background: rgba(10,8,18,.6); font-size: 14px;
+}
+.turn-badge b { color: #ffd84a; }
+.enemy { position: absolute; left: 50%; top: 56px; transform: translateX(-50%); width: min(380px, 40%); display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 2; }
+.enemy-name { margin: 0; font: 700 22px/1.3 "Gowun Batang", serif; text-shadow: -1px -1px 0 #120f1c, 1px -1px 0 #120f1c, -1px 1px 0 #120f1c, 1px 1px 0 #120f1c; }
+.enemy-name small { font-size: 16px; color: #ffb3bc; }
+.enemy-bar { width: 100%; height: 12px; border-radius: 6px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.35); overflow: hidden; }
+.enemy-bar span { display: block; height: 100%; background: #ff7a8a; transition: width .3s; }
+.enemy-figure { position: absolute; left: 50%; top: 36%; transform: translateX(-50%); width: 240px; height: 190px; }
+
+/* 참가자 컷: 좌 우 좌 우, 사다리꼴 */
+@property --led-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@keyframes led-spin { to { --led-angle: 360deg; } }
+.cut { position: absolute; width: 123px; }
+.cut.left { left: 18px; }
+.cut.right { right: 18px; }
+.cut-frame { position: absolute; inset: 0; }
+.cut.turn .cut-frame {
+  padding: 4px;
+  background: conic-gradient(from var(--led-angle), #e0b62e 0deg, #e0b62e 334deg, #fff2a0 344deg, #fff 350deg, #fff2a0 356deg, #e0b62e 360deg);
+  animation: led-spin 2.2s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { .cut.turn .cut-frame { animation: none; background: #ffd84a; } }
+.cut-photo { position: relative; width: 100%; height: 100%; overflow: hidden; background: linear-gradient(160deg, #5b3fa0 0%, #14111d 100%); }
+.cut-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; z-index: 1; }
+.cut-photo svg { position: absolute; z-index: 1; }
+.cut.down .cut-photo { filter: grayscale(1) brightness(.55); }
+.cut-hp { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; pointer-events: none; transition: height .5s ease; background: linear-gradient(to top, rgba(255,36,60,.45) 0%, rgba(255,36,60,.4) 85%, rgba(255,36,60,0) 100%); }
+.cut-name {
+  position: absolute; top: calc(100% - 16px); z-index: 4; white-space: nowrap;
+  font: 700 21px/1.3 "Gowun Batang", serif; color: #fff; letter-spacing: .5px;
+  text-shadow: -1.5px -1.5px 0 #120f1c, 1.5px -1.5px 0 #120f1c, -1.5px 1.5px 0 #120f1c, 1.5px 1.5px 0 #120f1c, 0 2px 8px rgba(0,0,0,.7);
+}
+.cut.left .cut-name { left: 6px; }
+.cut.right .cut-name { right: 6px; }
+.cut.down .cut-name { color: #bdb8c8; }
+.cut-bubble {
+  position: absolute; top: 12px; z-index: 3; width: max-content; max-width: 250px; padding: 8px 14px; border-radius: 14px;
+  background: #fff; color: #16121f; font-size: 14px; line-height: 1.45; word-break: keep-all; overflow-wrap: anywhere; box-shadow: 0 2px 10px rgba(0,0,0,.35);
+}
+.cut.left .cut-bubble { left: calc(100% + 12px); }
+.cut.right .cut-bubble { right: calc(100% + 12px); }
+.cut-bubble::before { content: ""; position: absolute; top: 14px; width: 10px; height: 10px; background: #fff; transform: rotate(45deg); }
+.cut.left .cut-bubble::before { left: -5px; }
+.cut.right .cut-bubble::before { right: -5px; }
+
+/* 아래 줄 */
+.bottom { flex: 3 1 0; min-height: 220px; max-height: 260px; display: flex; gap: 14px; }
+
+.chat { flex: 1 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.chat-tabs { display: flex; gap: 6px; }
+.chat-tabs button { min-height: 36px; padding: 0 16px; border-radius: 10px 10px 4px 4px; font-size: 13px; font-weight: 700; border: 1px solid var(--line); background: transparent; color: var(--muted); }
+.chat-tabs button.on { background: var(--panel-2); border-color: currentColor; }
+.chat-tabs .global.on { color: var(--global); }
+.chat-tabs .zone.on { color: var(--accent); }
+.chat-tabs .system.on { color: var(--system); }
+.chat-tabs .battle.on { color: var(--danger); }
+.chat-box { flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); overflow: hidden; }
+.chat-log { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 7px; }
+.chat-log li { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; word-break: break-word; }
+.chat-log .ava { flex: none; width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--panel-2); color: var(--accent); overflow: hidden; }
+.chat-log .ava img { width: 100%; height: 100%; object-fit: cover; }
+.chat-log .ava.sys { background: transparent; color: var(--system); }
+.chat-log .body { min-width: 0; padding-top: 2px; }
+.chat-log .tag { font-size: 12px; margin-right: 4px; }
+.chat-log .name { font-weight: 700; margin-right: 4px; }
+.chat-log .global .tag { color: var(--global); }
+.chat-log .zone .tag { color: var(--accent); }
+.chat-log .system .tag, .chat-log .system .text { color: var(--system); }
 .chat-log .battle .tag { color: var(--danger); }
-.chat-log .notice { color: var(--global); font-size: .9rem; }
+.chat-log .battlelog .text { color: var(--muted); }
+.chat-log.hide-global .global, .chat-log.hide-zone .zone, .chat-log.hide-system .system { display: none; }
+.in-battle .chat-log li:not(.battle):not(.battlelog) { display: none; }
+.chat-log li.battle, .chat-log li.battlelog { display: none; }
+.in-battle .chat-log li.battle, .in-battle .chat-log li.battlelog { display: flex; }
+.chat-form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); }
+.chat-form select, .chat-form input { width: auto; height: 44px; margin: 0; padding: 0 10px; font-size: 14px; }
+.chat-form input { flex: 1; min-width: 0; }
+.chat-form button { height: 44px; padding: 0 18px; font-size: 14px; font-weight: 700 !important; }
+
+.card-menu { flex: 0 0 500px; display: flex; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); overflow: hidden; }
+.profile-card { flex: 0 0 196px; padding: 8px 6px 12px; display: flex; flex-direction: column; align-items: center; position: relative; }
+.profile-card .lv { position: absolute; left: 12px; top: 6px; font: 700 18px/1.3 "Gowun Batang", serif; color: var(--accent); }
+.profile-card .photo { width: 112px; height: 112px; flex: none; border-radius: 50%; border: 3px solid var(--accent); background: linear-gradient(160deg, #5b3fa0 0%, #14111d 100%); overflow: hidden; position: relative; }
+.profile-card .photo img, .profile-card .photo svg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.profile-card .title { margin: 4px 0 0; font-size: 12px; line-height: 1.2; color: var(--title); }
+.profile-card .name { margin: 0; font-size: 17px; line-height: 1.25; font-weight: 700; }
+.profile-card .bars { width: 100%; margin-top: auto; padding-top: 10px; display: flex; flex-direction: column; gap: 2px; }
+.profile-card .bar-row { display: flex; align-items: center; gap: 3px; font-size: 10px; line-height: 12px; color: var(--muted); }
+.profile-card .bar-row b { flex: none; width: 21px; }
+.profile-card .bar-track { flex: 1; height: 6px; background: var(--panel-2); overflow: hidden; }
+.profile-card .bar-track span { display: block; height: 100%; transition: width .3s; }
+.profile-card .bar-row .val { flex: none; width: 42px; text-align: right; }
+
+.actions { flex: 1 1 280px; min-width: 0; padding: 12px 14px 12px 4px; overflow-y: auto; }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 66px; gap: 8px; }
+.tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 4px;
+  border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  font-size: 12px; line-height: 1.25; text-align: center; min-width: 0;
+}
+.tile small { color: var(--muted); font-size: 11px; }
+.tile.back { background: transparent; color: var(--muted); }
+.tile.move { border-color: var(--accent); }
+.tile.danger { border-color: #ff7a8a; color: #ff9aa6; }
+body.light .tile.danger { color: #b4233a; }
+.tile.flee { background: transparent; color: var(--muted); }
+.tile:disabled { opacity: .7; cursor: default; background: transparent; color: var(--muted); }
+/* 전투 명령: 윗줄(2/3) 스킬 3 : 공격 2 / 아랫줄(1/3) 아이템(남은 폭) · 도주(정사각형) */
+.actions.battle { padding: 22px 22px 22px 18px; }
+.battle-grid { display: grid; grid-template-rows: 2fr 1fr; gap: 8px; height: 100%; max-height: 196px; }
+.battle-grid .row { display: flex; gap: 8px; min-height: 0; flex-wrap: nowrap; align-items: stretch; }
+.battle-grid .skill { flex: 3 1 0; }
+.battle-grid .attack { flex: 2 1 0; }
+.battle-grid .item { flex: 1 1 0; }
+.battle-grid .flee { flex: 0 0 auto; height: 100%; aspect-ratio: 1 / 1; }
+.actions .note { margin: 0; color: var(--muted); font-size: 13px; }
+
+.icon-menu { position: relative; flex: 0 0 34px; display: flex; flex-direction: column; gap: 7px; }
+.icon-btn { width: 34px; height: 34px; flex: none; padding: 0; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--text); display: grid; place-items: center; }
+.icon-btn:disabled { color: var(--muted); opacity: .55; }
+#settings-btn[aria-expanded="true"] { border-color: #ffd84a; color: #ffd84a; }
+.settings-pop { position: absolute; right: 44px; bottom: 0; z-index: 5; display: flex; gap: 8px; padding: 6px; border-radius: 14px; border: 1px solid #ffd84a; background: var(--panel); box-shadow: 0 6px 20px rgba(0,0,0,.45); }
+.settings-pop.hidden { display: none; }
+
+.statusline { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.conn-dot { width: 9px; height: 9px; border-radius: 50%; background: #4fd27a; box-shadow: 0 0 6px rgba(79,210,122,.7); }
+.conn-dot.warn { background: #ffa53d; box-shadow: 0 0 6px rgba(255,165,61,.7); }
+.conn-dot.bad { background: #ff5a5a; box-shadow: 0 0 6px rgba(255,90,90,.7); }
+
+/* 결과 · 스탯 창 (예전 팝업, 다음 단계에서 새 디자인으로) */
 .result { text-align: center; }
 .result .big { font-size: 1.6rem; font-weight: 700; margin: 8px 0; }
 .result .victory { color: var(--accent); }
 .result .defeat { color: var(--danger); }
 .stat-row button { padding: 2px 10px; margin-left: 8px; }
 
-@media (max-width: 760px) {
-  .battle-grid { grid-template-columns: 1fr 1.3fr 1fr; gap: 6px; }
-  .slots { flex-direction: column; }
-  .slot { min-height: 0; padding: 6px; }
-  .slot.empty { min-height: 70px; }
-  .slot .avatar { width: 36px; height: 36px; }
-  .battle-buttons { grid-template-columns: 1fr; }
-  .field-main { padding: 10px; overflow-y: auto; }
-  .field-view { min-height: 100%; }
-  .battle-view { flex: none; gap: 8px; }
-  .battle-log { flex: none; max-height: 140px; }
-  .enemy { padding: 8px 12px; }
-  .enemy .muted, .slot .muted { display: none; }
-  .in-battle .field { grid-template-rows: minmax(0, 2.2fr) minmax(0, 1fr); }
-  .field { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
-  .field-side { border-left: none; border-top: 1px solid var(--line); }
-  .players { max-height: 25%; }
+/* 폰 화면은 아직 정하지 않았다: 좁으면 위아래로 쌓기만 한다 */
+@media (max-width: 900px) {
+  #screen-game { height: auto; }
+  .game { padding: 10px; height: auto; }
+  .scene { flex: none; height: 62vh; }
+  .bottom { flex-direction: column; max-height: none; }
+  .chat { flex: none; height: 260px; }
+  .card-menu { flex: none; }
+  .icon-menu { flex-direction: row; flex-wrap: wrap; }
+  .settings-pop { right: auto; left: 0; bottom: 44px; }
+  .caption, .in-battle .caption { width: calc(100% - 24px); padding: 0 12px; }
 }

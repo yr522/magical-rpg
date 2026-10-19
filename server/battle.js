@@ -140,9 +140,9 @@ class Battle {
       p.defending = false;
       for (const code of Object.keys(p.cooldowns)) p.cooldowns[code] = Math.max(0, p.cooldowns[code] - 1);
       this.current = { kind: 'player', id: p.id, deadline: Date.now() + this.turnMs };
-      // 제한시간 안에 고르지 않으면 자동 방어.
+      // 제한시간 안에 고르지 않으면 자동 공격.
       this.timer = setTimeout(() => {
-        if (!this.busy) this.act(p.id, { action: 'defend' }, true);
+        if (!this.busy) this.act(p.id, { action: 'attack' }, true);
       }, this.turnMs);
       this.update();
       return;
@@ -164,6 +164,7 @@ class Battle {
     try {
       switch (cmd.action) {
         case 'attack':
+          if (auto) this.log(`${p.name}은(는) 머뭇거리다 반사적으로 공격했다. (시간 초과)`);
           this.hitMonster(p, { atk: p.physAtk, coef: 1, element: 'physical', label: '공격' });
           break;
         case 'skill':
@@ -174,7 +175,7 @@ class Battle {
           break;
         case 'defend':
           p.defending = true;
-          this.log(auto ? `${p.name}은(는) 머뭇거리다 방어 자세를 취했다. (시간 초과)` : `${p.name}은(는) 방어 자세를 취했다.`);
+          this.log(`${p.name}은(는) 방어 자세를 취했다.`);
           break;
         case 'flee':
           fled = this.tryFlee(p);

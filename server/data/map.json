@@ -1,7 +1,9 @@
 {
   "regions": [
-    { "id": "hq", "name": "본부", "safe": true, "level": "-", "element": "-" },
-    { "id": "park", "name": "공원 균열", "safe": false, "level": "1~10", "element": "자연" }
+    { "id": "hq", "name": "본부", "safe": true, "level": "-", "element": "-",
+      "colors": { "sky": "linear-gradient(180deg, #2a2438 0%, #3a3150 60%, #2a2438 100%)", "ground": "#1d1828", "groundEdge": "#4a3f66" } },
+    { "id": "park", "name": "공원 균열", "safe": false, "level": "1~10", "element": "자연",
+      "colors": { "sky": "linear-gradient(180deg, #1c2b26 0%, #243a30 55%, #1a2a22 100%)", "ground": "#16201a", "groundEdge": "#2f4a3a" } }
   ],
   "zones": [
     {
