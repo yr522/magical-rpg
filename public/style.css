@@ -605,3 +605,21 @@ body.light .popup-close { color: var(--text); }
 .vote-list li.ok { color: var(--text); }
 .vote-list li.ok span { color: #7fd49a; }
 .vote-list small { font-size: 12px; color: var(--muted); }
+
+/* 관리자 모드 */
+.pop-admin { width: 640px; height: 560px; padding: 22px 26px 18px; }
+.admin-win { height: 100%; display: flex; flex-direction: column; gap: 12px; }
+.admin-win .phead { padding-right: 24px; }
+.admin-top { display: flex; align-items: center; gap: 14px; }
+.admin-top .pbtn.main { height: 36px; padding: 0 16px; font-size: 14px; }
+.admin-new { font-size: 14px; }
+.admin-new b { font-family: ui-monospace, monospace; color: var(--title); letter-spacing: 1px; }
+.admin-table { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 6px; }
+.arow { display: grid; grid-template-columns: 120px 120px 1fr 52px; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; background: var(--panel-2); font-size: 13px; }
+.arow.head { background: none; color: var(--muted); font-size: 12px; padding-top: 0; padding-bottom: 0; }
+.arow.used { opacity: .7; }
+.arow.fresh { box-shadow: inset 3px 0 0 var(--title); }
+.acode { font-family: ui-monospace, monospace; letter-spacing: 1px; }
+.astate { color: var(--muted); }
+.arow.used .astate { color: #7fd49a; }
+.foot-note { margin: 0; font-size: 12px; }

@@ -19,6 +19,7 @@
       <form id="auth-form" autocomplete="on">
         <label>닉네임 <input name="nickname" maxlength="12" autocomplete="username" required></label>
         <label>비밀번호 <input name="password" type="password" maxlength="64" autocomplete="current-password" required></label>
+        <label>초대 코드 <span class="muted">(처음 가입할 때만)</span> <input name="invite" maxlength="20" autocomplete="off" placeholder="예: K7QM-2XPA"></label>
         <p id="auth-error" class="error"></p>
         <div class="row">
           <button type="submit" data-mode="login">로그인</button>

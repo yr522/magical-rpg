@@ -40,6 +40,9 @@
 
 | 항목 | 값 | 바꾸는 곳 |
 | --- | --- | --- |
+| 회원가입 초대 코드 | 가입할 때 초대 코드가 꼭 필요하다. 코드 하나로 계정 하나만 만들 수 있다 (대소문자 상관없음, `XXXX-XXXX` 8글자) | `server/index.js`의 `auth:register` |
+| 관리자 계정 | 닉네임이 `admin`인 계정 (대소문자 상관없음). 이 닉네임은 Render의 `ADMIN_CODE` 값을 초대 코드 칸에 적어야만 가입된다 | Render 환경 변수 `ADMIN_NICKNAME`, `ADMIN_CODE` |
+| 관리자 모드 | 관리자 계정으로 로그인한 뒤 **Ctrl+Q**로 열고 닫는다. 지금은 초대 코드 만들기 · 목록 · 사용 여부만 있다 | `public/app.js`의 `openAdmin` |
 | 공격력 / 마법 공격력 / 방어력 | STR×2+레벨 / MAG×2+레벨 / VIT×1.5+레벨 | `server/game.js`의 `combatStats` |
 | 필요 경험치 | 50 × 현재 레벨 | `server/data/character.json`의 `growth` |
 | HP 회복 | 본부에 들어가면 전체 회복 | `server/index.js`의 `move` |
@@ -152,7 +155,8 @@ DB 설정이 없어도 `data/local-db.json` 파일에 저장되면서 돌아간�
 1. <https://render.com> 에 GitHub 계정으로 가입
 2. **New → Blueprint** → `yr522/magical-rpg` 저장소 선택 → 브랜치 선택
    (이 저장소의 `render.yaml`을 읽어 설정이 자동으로 채워진다)
-3. `DATABASE_URL` 칸에 ①에서 복사한 주소를 붙여 넣고 **Apply**
+3. `DATABASE_URL` 칸에 ①에서 복사한 주소를 붙여 넣고, `ADMIN_CODE` 칸에 나만 아는 비밀 코드를 적고 **Apply**
+   (그 다음 닉네임 `admin`, 초대 코드 칸에 그 비밀 코드를 적어 가입하면 관리자 계정이 된다)
 4. 배포가 끝나면 `https://magical-rpg-xxxx.onrender.com` 같은 주소가 생긴다. 이 주소를 지인들에게 공유
 
 서버 로그에 `저장소: Postgres (DATABASE_URL)`가 보이면 Supabase에 잘 연결된 것이다.

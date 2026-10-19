@@ -30,6 +30,9 @@ function countItems(codes) {
 // 새 아이템은 코드 문자열이나 { code, grade, options, slot, equipped } 둘 다 받는다.
 const normalizeItem = (x) => (typeof x === 'string' ? { code: x } : x);
 
+// 초대 코드 한 줄
+const inviteRow = (r) => ({ code: r.code, createdAt: r.created_at, usedAt: r.used_at || null, usedBy: r.used_nickname || null });
+
 // 친구 · 관계 한 줄
 const linkRow = (r) => ({ id: Number(r.id), kind: r.kind, fromId: Number(r.from_id), toId: Number(r.to_id), name: r.name || null, status: r.status });
 
@@ -219,6 +222,45 @@ function createPostgresStore(connectionString) {
       );
       return rowCount > 0;
     },
+    // ---------- 초대 코드 ----------
+    async addInviteCode(code) {
+      await pool.query('INSERT INTO invite_codes (code) VALUES ($1)', [code]);
+    },
+    async listInviteCodes() {
+      const { rows } = await pool.query(
+        `SELECT c.code, c.created_at, c.used_at, c.used_by, u.nickname AS used_nickname
+         FROM invite_codes c LEFT JOIN users u ON u.id = c.used_by ORDER BY c.created_at DESC`,
+      );
+      return rows.map(inviteRow);
+    },
+    // 초대 코드를 쓰면서 가입. 코드가 없거나 이미 쓰였으면 { error: 'code' }, 닉네임이 겹치면 { error: 'nickname' }.
+    async createUserWithInvite(nickname, passwordHash, code) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows: codes } = await client.query('SELECT * FROM invite_codes WHERE upper(code) = upper($1) FOR UPDATE', [code]);
+        if (!codes.length || codes[0].used_at) {
+          await client.query('ROLLBACK');
+          return { error: 'code' };
+        }
+        let user;
+        try {
+          ({ rows: [user] } = await client.query('INSERT INTO users (nickname, password_hash) VALUES ($1, $2) RETURNING *', [nickname, passwordHash]));
+        } catch (err) {
+          await client.query('ROLLBACK');
+          if (isUniqueViolation(err)) return { error: 'nickname' };
+          throw err;
+        }
+        await client.query('UPDATE invite_codes SET used_by = $2, used_at = now() WHERE code = $1', [codes[0].code, user.id]);
+        await client.query('COMMIT');
+        return { user: withNumberIds(user) };
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    },
     // ---------- 친구 · 관계 (links) ----------
     async getCharacterByName(name) {
       const { rows } = await pool.query('SELECT * FROM characters WHERE lower(name) = lower($1)', [name]);
@@ -383,6 +425,24 @@ function createFileStore(filePath) {
       data.items.splice(index, 1);
       save();
       return true;
+    },
+    async addInviteCode(code) {
+      data.invites = data.invites || [];
+      data.invites.push({ code, created_at: new Date().toISOString(), used_by: null, used_at: null });
+      save();
+    },
+    async listInviteCodes() {
+      return [...(data.invites || [])].reverse().map((c) => inviteRow({ ...c, used_nickname: data.users.find((u) => u.id === c.used_by)?.nickname }));
+    },
+    async createUserWithInvite(nickname, passwordHash, code) {
+      const invite = (data.invites || []).find((c) => c.code.toUpperCase() === String(code).toUpperCase());
+      if (!invite || invite.used_at) return { error: 'code' };
+      const user = await this.createUser(nickname, passwordHash);
+      if (!user) return { error: 'nickname' };
+      invite.used_by = user.id;
+      invite.used_at = new Date().toISOString();
+      save();
+      return { user };
     },
     async getCharacterByName(name) {
       return copy(data.characters.find((c) => lower(c.name) === lower(name)));
