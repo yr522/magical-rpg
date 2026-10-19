@@ -21,6 +21,7 @@ const MAX_CHARACTERS_PER_USER = 5;
 
 const DEATH_GOLD_PENALTY = 0.1;
 const BAG_SIZE = game.characterData.bagSize; // 가방 최대 칸 수
+const RAID_VOTE_MS = 30000; // 파티 같이 입장: 모두 수락할 때까지 기다리는 시간
 
 const zoneRoom = (zoneId) => `zone:${zoneId}`;
 const battleRoom = (eventId) => `battle:${eventId}`;
@@ -299,6 +300,7 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
   function leaveParty(charId) {
     const party = parties.get(partyOf.get(charId));
     if (!party) return;
+    endRaidVote(party, '파티원이 바뀌어 같이 입장이 취소됐다.');
     party.members = party.members.filter((id) => id !== charId);
     partyOf.delete(charId);
     online.get(charId)?.socket?.emit('party:update', { party: null });
@@ -344,6 +346,50 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
         return { ...r, status: l.status, incoming: l.status === 'pending' && l.toId === charId };
       }),
     };
+  }
+
+  // 토벌에 들어갈 수 있는지 (여러 명이 같이 들어갈 때는 남은 자리도 확인). 문제가 있으면 이유 글자.
+  function raidProblem(entries, ev) {
+    if (!ev) return '그런 토벌 이벤트는 없습니다.';
+    for (const e of entries) {
+      if (!e || !online.has(e.row.id)) return '접속하지 않은 사람이 있습니다.';
+      if (e.battleId) return `${e.row.name}은(는) 이미 전투 중입니다.`;
+      if (ev.zone !== e.row.location_id) return `${game.zones.get(ev.zone).name}에 가야 입장할 수 있습니다.`;
+    }
+    const inside = battles.get(ev.id)?.party.size || 0;
+    if (inside + entries.length > MAX_PARTY) return `자리가 모자랍니다. (최대 ${MAX_PARTY}명, 지금 ${inside}명이 싸우는 중)`;
+    return null;
+  }
+
+  function joinRaid(entry, ev, items, defer = false) {
+    let battle = battles.get(ev.id);
+    if (!battle) {
+      battle = new Battle({ event: ev, hooks: battleHooks, rng, ...battleOptions });
+      battles.set(ev.id, battle);
+    }
+    entry.battleId = ev.id;
+    entry.socket?.join(battleRoom(ev.id));
+    battle.join(entry.row, items, defer);
+    systemMessage(ev.zone, `${entry.row.name}이(가) ${battle.def.name}에게 맞서 균열 속으로 들어갔다.`);
+    sendPlayers(ev.zone);
+  }
+
+  // 파티 같이 입장 투표: 파티원 모두에게 누가 수락했는지 보낸다.
+  function sendRaidVote(party) {
+    const vote = party.raidVote;
+    const ev = events.get(vote.eventId);
+    const names = party.members.map((id) => ({ id, name: online.get(id)?.row.name || '?', accepted: vote.accepted.has(id) }));
+    const from = online.get(vote.from)?.row.name || '?';
+    for (const id of party.members) {
+      online.get(id)?.socket?.emit('raid:vote', { eventId: vote.eventId, monster: game.monsters.get(ev.monster).name, from, members: names, mine: vote.accepted.has(id), seconds: Math.round(RAID_VOTE_MS / 1000) });
+    }
+  }
+  function endRaidVote(party, message) {
+    const vote = party.raidVote;
+    if (!vote) return;
+    clearTimeout(vote.timer);
+    party.raidVote = null;
+    for (const id of party.members) online.get(id)?.socket?.emit('raid:voteEnd', { message });
   }
 
   // 다른 사람에게도 보이는 OC 프로필
@@ -837,28 +883,59 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
     on('raid:enter', async ({ eventId }, reply) => {
       const entry = currentEntry(socket);
       if (!entry) return reply({ error: '캐릭터를 먼저 골라 주세요.' });
-      if (entry.battleId) return reply({ error: '이미 전투 중입니다.' });
       const ev = events.get(eventId);
-      if (!ev) return reply({ error: '그런 토벌 이벤트는 없습니다.' });
-      if (ev.zone !== entry.row.location_id) return reply({ error: `${game.zones.get(ev.zone).name}에 가야 입장할 수 있습니다.` });
-      let battle = battles.get(ev.id);
-      if (battle?.isFull()) return reply({ error: `이미 ${MAX_PARTY}명이 싸우고 있습니다. 전투가 끝나면 다시 시도해 주세요.` });
-
+      const problem = raidProblem([entry], ev);
+      if (problem) return reply({ error: problem });
       const items = await store.listItems(entry.row.id);
-      if (entry.battleId || !online.has(entry.row.id)) return reply({ error: '이미 전투 중입니다.' });
-      battle = battles.get(ev.id);
-      if (!battle) {
-        battle = new Battle({ event: ev, hooks: battleHooks, rng, ...battleOptions });
-        battles.set(ev.id, battle);
-      } else if (battle.isFull()) {
-        return reply({ error: `이미 ${MAX_PARTY}명이 싸우고 있습니다.` });
-      }
-      entry.battleId = ev.id;
-      socket.join(battleRoom(ev.id));
+      const again = raidProblem([entry], ev);
+      if (again) return reply({ error: again });
       reply({ ok: true });
-      battle.join(entry.row, items);
-      systemMessage(ev.zone, `${entry.row.name}이(가) ${battle.def.name}에게 맞서 균열 속으로 들어갔다.`);
-      sendPlayers(ev.zone);
+      joinRaid(entry, ev, items);
+    });
+
+    // 파티와 같이 입장: 같은 장소의 모든 파티원이 수락하는 순간 다 같이 들어간다.
+    on('raid:partyStart', async ({ eventId }, reply) => {
+      const entry = currentEntry(socket);
+      if (!entry) return reply({ error: '캐릭터를 먼저 골라 주세요.' });
+      const party = parties.get(partyOf.get(entry.row.id));
+      if (!party) return reply({ error: '파티에 들어가 있지 않아요.' });
+      if (party.raidVote) return reply({ error: '이미 같이 입장을 묻고 있어요.' });
+      const ev = events.get(eventId);
+      const members = party.members.map((id) => online.get(id));
+      const away = party.members.filter((id, i) => !members[i]?.socket || members[i].row.location_id !== entry.row.location_id);
+      if (away.length) {
+        const names = (await Promise.all(away.map(rowOf))).map((r) => r?.name || '?').join(', ');
+        return reply({ error: `모든 파티원이 접속해서 같은 장소에 있어야 같이 들어갈 수 있어요. (다른 곳: ${names})` });
+      }
+      const problem = raidProblem(members, ev);
+      if (problem) return reply({ error: problem });
+      const vote = { eventId: ev.id, from: entry.row.id, accepted: new Set([entry.row.id]), timer: null };
+      party.raidVote = vote;
+      vote.timer = setTimeout(() => endRaidVote(party, '시간 안에 모두 수락하지 않아 취소됐다.'), RAID_VOTE_MS);
+      sendRaidVote(party);
+      reply({ ok: true });
+    });
+
+    on('raid:partyAnswer', async ({ accept }, reply) => {
+      const entry = currentEntry(socket);
+      if (!entry) return reply({ error: '캐릭터를 먼저 골라 주세요.' });
+      const party = parties.get(partyOf.get(entry.row.id));
+      const vote = party?.raidVote;
+      if (!vote) return reply({ error: '물어보는 중인 토벌 입장이 없어요.' });
+      reply({ ok: true });
+      if (!accept) return endRaidVote(party, `${entry.row.name}이(가) 거절해서 같이 입장이 취소됐다.`);
+      vote.accepted.add(entry.row.id);
+      if (vote.accepted.size < party.members.length) return sendRaidVote(party);
+      // 모두 수락: 다시 한 번 확인하고 다 같이 입장
+      const members = party.members.map((id) => online.get(id));
+      const ev = events.get(vote.eventId);
+      const problem = members.some((m) => !m?.socket) ? '파티원이 접속을 끊었다.' : raidProblem(members, ev);
+      endRaidVote(party, problem ? `같이 입장하지 못했다: ${problem}` : null);
+      if (problem) return;
+      const items = await Promise.all(members.map((m) => store.listItems(m.row.id)));
+      if (raidProblem(members, ev)) return;
+      // 다 같이 들어온 뒤에 첫 라운드를 시작한다.
+      members.forEach((m, i) => joinRaid(m, ev, items[i], i < members.length - 1));
     });
 
     on('battle:action', async (cmd, reply) => {

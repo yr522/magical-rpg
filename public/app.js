@@ -391,7 +391,17 @@
   // 토벌 입장: 바닥 글 상자에 선택지
   function raidPrompt() {
     const evs = state.zone.events;
-    const choices = evs.map((ev, i) => ({ label: `${i + 1}. ${evs.length > 1 ? `${ev.monsterName}에게 ` : ''}들어간다`, pick: () => enterRaid(ev.id) }));
+    const inParty = state.party && state.party.members.length > 1;
+    const choices = [];
+    for (const ev of evs) {
+      const who = evs.length > 1 ? `${ev.monsterName}에게 ` : '';
+      if (inParty) {
+        choices.push({ label: `${choices.length + 1}. ${who}파티와 같이 들어간다`, pick: () => partyRaid(ev.id) });
+        choices.push({ label: `${choices.length + 1}. ${who}혼자 들어간다`, pick: () => enterRaid(ev.id) });
+      } else {
+        choices.push({ label: `${choices.length + 1}. ${who}들어간다`, pick: () => enterRaid(ev.id) });
+      }
+    }
     choices.push({ label: `${choices.length + 1}. 물러난다`, pick: () => showCaption(state.zone.desc, null, false) });
     showCaption(evs.map((ev) => `${ev.monsterName} Lv.${ev.monsterLevel ?? ''} — 등급: ${ev.grade} · 참가 ${ev.participants}/${ev.max}`).join('\n'), choices, false);
   }
@@ -458,6 +468,11 @@
       el('header', {}, [el('div', { class: 'phead' }, [el('h2', { class: 'ptitle', text: '토벌 목록' }), el('span', { class: 'who', text: `진행 중 ${res.events.length}건` })]), ornament()]),
       res.events.length ? el('ul', { class: 'raid-grid' }, res.events.map(card)) : el('p', { class: 'muted', text: '지금 열린 토벌 이벤트가 없다.' }),
     ]), 'pop-raid');
+  }
+
+  async function partyRaid(eventId) {
+    const res = await request('raid:partyStart', { eventId });
+    if (res.error) toast(res.error);
   }
 
   async function enterRaid(eventId) {
@@ -678,7 +693,8 @@
         title: on ? `${label} 채팅 켜짐 (누르면 숨김)` : `${label} 채팅 꺼짐 (누르면 보임)`,
         onclick: () => {
           if (on) hiddenChannels.add(ch); else hiddenChannels.delete(ch);
-          $('chat-log').classList.toggle(`hide-${ch}`, !on);
+          // 켜져 있던 탭을 누르면 숨기고, 꺼져 있던 탭을 누르면 다시 보인다.
+          $('chat-log').classList.toggle(`hide-${ch}`, on);
           renderChatTabs();
         },
       });
@@ -1545,14 +1561,42 @@
     if (partyOpen()) renderParty();
   });
   // 초대를 받으면 바닥 글 상자에 선택지가 뜬다.
+  // 파티 초대를 받으면 팝업으로 묻는다.
   socket.on('party:invited', ({ partyId, from, name }) => {
     const answer = (accept) => async () => {
+      closeModal();
       const res = await request('party:respond', { partyId, accept });
-      if (res.error) toast(res.error);
-      else if (accept) { state.party = res.party; renderPartyPanel(); }
-      showCaption(accept && !res.error ? `[${name}]에 들어갔다.` : '파티 초대를 거절했다.', null, false);
+      if (res.error) return toast(res.error);
+      if (accept) { state.party = res.party; renderPartyPanel(); }
+      addSystem(accept ? `[${name}]에 들어갔다.` : `${from}의 파티 초대를 거절했다.`);
     };
-    showCaption(`${from}이(가) [${name}]에 초대했다.`, [{ label: '1. 들어간다', pick: answer(true) }, { label: '2. 거절한다', pick: answer(false) }]);
+    openModal(el('div', { class: 'ask-pop' }, [
+      el('h2', { class: 'ptitle', text: '파티 초대' }),
+      ornament(),
+      el('p', {}, [el('b', { text: from }), `이(가) `, el('b', { text: `[${name}]` }), '에 초대했어요.']),
+      el('p', { class: 'muted', text: '파티에 들어갈까요?' }),
+      el('div', { class: 'dactions' }, [actBtn('수락', answer(true), true), actBtn('거절', answer(false))]),
+    ]), 'pop-small');
+  });
+
+  // 파티 같이 토벌 입장: 모두 수락하면 들어간다. 누가 수락했는지 보여 주는 팝업.
+  socket.on('raid:vote', ({ monster, from, members, mine, seconds }) => {
+    const answer = (accept) => async () => {
+      const res = await request('raid:partyAnswer', { accept });
+      if (res.error) toast(res.error);
+    };
+    openModal(el('div', { class: 'ask-pop' }, [
+      el('h2', { class: 'ptitle', text: '같이 토벌 입장' }),
+      ornament(),
+      el('p', {}, [el('b', { text: from }), `이(가) 파티와 같이 `, el('b', { text: monster }), ' 토벌에 들어가자고 해요.']),
+      el('ul', { class: 'vote-list' }, members.map((m) => el('li', { class: m.accepted ? 'ok' : '' }, [el('span', { text: m.accepted ? '✔' : '…' }), ` ${m.name}`, el('small', { text: m.accepted ? ' 수락' : ' 기다리는 중' })]))),
+      el('p', { class: 'muted', text: `모두 수락하는 순간 같이 들어가요. (${seconds}초 안에)` }),
+      el('div', { class: 'dactions' }, mine ? [actBtn('취소', answer(false))] : [actBtn('수락', answer(true), true), actBtn('거절', answer(false))]),
+    ]), 'pop-small');
+  });
+  socket.on('raid:voteEnd', ({ message }) => {
+    if ($('modal-content').querySelector('.vote-list')) closeModal();
+    if (message) showCaption(message, null, true);
   });
 
   // 필드 왼쪽 위 (맵 이름 아래): 나 포함 파티원. 반투명 검정, 외곽선 없음.

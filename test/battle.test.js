@@ -286,3 +286,32 @@ test('대사 프리셋: 전투 시작 · 공격할 때 내 대사가 전투 채�
   assert.deepStrictEqual(said.slice(0, 2), ['계약의 이름으로!', '간다!']);
   await s.call('battle:action', { action: 'flee' }).catch(() => {});
 });
+
+test('파티 같이 입장: 같은 장소의 파티원이 모두 수락하면 다 같이 들어가고, 한 명이 거절하면 취소', async () => {
+  const a = await player();
+  const b = await player('supporter');
+  for (const s of [a, b]) await walkToRift(s);
+  const invited = new Promise((r) => b.once('party:invited', r));
+  assert.ok((await a.call('party:invite', { name: b.character.name })).ok);
+  await b.call('party:respond', { partyId: (await invited).partyId, accept: true });
+
+  // 거절하면 취소
+  let asked = new Promise((r) => b.once('raid:vote', r));
+  assert.ok((await a.call('raid:partyStart', { eventId: 'test_vine' })).ok);
+  await asked;
+  const cancelled = new Promise((r) => a.once('raid:voteEnd', r));
+  await b.call('raid:partyAnswer', { accept: false });
+  assert.match((await cancelled).message, /거절/);
+  assert.strictEqual(a.latest, null);
+
+  // 모두 수락하면 같이 입장
+  asked = new Promise((r) => b.once('raid:vote', r));
+  assert.ok((await a.call('raid:partyStart', { eventId: 'test_vine' })).ok);
+  await asked;
+  await b.call('raid:partyAnswer', { accept: true });
+  await until(a, (x) => x.latest?.party.length === 2);
+  await until(b, (x) => x.latest?.party.length === 2);
+  // 같이 들어왔으니 둘 다 1라운드부터 차례가 있다.
+  assert.strictEqual(a.latest.round, 1);
+  for (const s of [a, b]) await s.call('char:leave');
+});
