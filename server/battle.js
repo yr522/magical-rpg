@@ -27,7 +27,7 @@ function calcDamage({ atk, coef, def, mult, rng }) {
 }
 
 class Battle {
-  constructor({ event, hooks, rng = Math.random, turnMs = 30000, monsterDelayMs = 1000 }) {
+  constructor({ event, hooks, rng = Math.random, turnMs = 0, monsterDelayMs = 1000 }) {
     this.event = event;
     this.def = game.monsters.get(event.monster);
     this.monster = { hp: this.def.hp, maxHp: this.def.hp, turns: 0 };
@@ -146,11 +146,15 @@ class Battle {
       if (!p || p.down) continue;
       p.defending = false;
       for (const code of Object.keys(p.cooldowns)) p.cooldowns[code] = Math.max(0, p.cooldowns[code] - 1);
-      this.current = { kind: 'player', id: p.id, deadline: Date.now() + this.turnMs };
-      // 제한시간 안에 고르지 않으면 자동 공격.
-      this.timer = setTimeout(() => {
-        if (!this.busy) this.act(p.id, { action: 'attack' }, true);
-      }, this.turnMs);
+      // 차례 제한시간은 없다 (기획자 결정: RP 요소가 많아 한 턴 한 턴 천천히 고를 수 있게).
+      // 연결이 끊긴 사람은 재접속 대기 시간(30초)이 지나면 전투에서 빠지므로 전투가 멈추지 않는다.
+      // turnMs는 테스트에서만 쓴다: 정하면 그 시간 안에 안 고를 때 자동 공격.
+      this.current = { kind: 'player', id: p.id, deadline: this.turnMs ? Date.now() + this.turnMs : null };
+      if (this.turnMs) {
+        this.timer = setTimeout(() => {
+          if (!this.busy) this.act(p.id, { action: 'attack' }, true);
+        }, this.turnMs);
+      }
       this.update();
       return;
     }
