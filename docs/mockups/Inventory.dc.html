@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>인벤토리 창 시안</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&amp;family=Noto+Sans+KR:wght@300;400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font-family:inherit}
+button:focus-visible{outline:2px solid #b48cff;outline-offset:2px}
+</style>
+</helmet>
+<!-- 필드 화면 위에 뜨는 팝업 (뒤는 어둡게) -->
+<div style="width: 1440px; height: 890px; box-sizing: border-box; position: relative; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans KR', system-ui, sans-serif; font-size: 15px; line-height: 1.55; background: radial-gradient(ellipse at 50% 30%, #2a3b33 0%, #12161a 70%); color: {{t.text}}">
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(5,4,10,0.6)"></div>
+
+  <div style="position: relative; z-index: 1; filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5))">
+    <button type="button" aria-label="인벤토리 닫기" style="position: absolute; right: 12px; top: 10px; z-index: 2; width: 18px; height: 18px; padding: 0; border: none; background: transparent; color: #ffffff; font-size: 13px; line-height: 1; cursor: pointer">×</button>
+    <section role="dialog" aria-label="인벤토리" style="width: 728px; height: 448px; box-sizing: border-box; display: flex; gap: 32px; padding: 22px 26px 20px 30px; background: linear-gradient(135deg, {{t.panel}} 0%, {{t.bg}} 100%)">
+
+      <!-- 왼쪽: 고른 아이템 자세히 -->
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center">
+        <sc-if value="{{hasSel}}" hint-placeholder-val="{{true}}">
+          <div role="img" aria-label="{{sel.name}} 그림" style="{{sel.bigStyle}}">{{sel.icon}}</div>
+          <div>
+            <p style="margin: 0; font-family: 'Gowun Batang', serif; font-size: 20px; font-weight: 700; line-height: 1.3">{{sel.name}}</p>
+            <p style="margin: 2px 0 0; font-size: 13px; color: {{sel.gradeColor}}">{{sel.sub}}</p>
+          </div>
+          <p style="margin: 0; max-width: 300px; white-space: pre-line; font-size: 13px; line-height: 1.6">{{sel.desc}}</p>
+          <dl style="margin: 4px 0 0; display: grid; grid-template-columns: auto auto; column-gap: 12px; row-gap: 2px; font-size: 13px; text-align: left">
+            <dt style="color: {{t.muted}}">습득처</dt><dd style="margin: 0">{{sel.from}}</dd>
+            <dt style="color: {{t.muted}}">판매가</dt><dd style="margin: 0">{{sel.sell}}</dd>
+          </dl>
+          <div style="display: flex; gap: 6px; margin-top: 4px">
+            <sc-for list="{{sel.actions}}" as="a" hint-placeholder-count="2">
+              <button type="button" onClick="{{a.act}}" style="{{a.style}}">{{a.label}}</button>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{noSel}}" hint-placeholder-val="{{false}}">
+          <p style="margin: 0; color: {{t.muted}}">아이템을 누르면 여기에 설명이 나와요.</p>
+        </sc-if>
+      </div>
+
+      <!-- 오른쪽: 장식선 + 아이템 칸 (스크롤) + 골드 -->
+      <div style="flex: 0 0 304px; display: flex; flex-direction: column; gap: 12px">
+        <div aria-hidden="true" style="display: flex; align-items: center; gap: 14px; margin-right: 32px; color: {{t.accent}}">
+          <span style="flex: 1; height: 2px; background: {{t.accent}}"></span>
+          <span style="font-size: 16px; line-height: 1">✦</span>
+          <span style="flex: 1; height: 2px; background: {{t.accent}}"></span>
+        </div>
+        <div role="listbox" aria-label="가방" style="flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px 2px 2px">
+          <div style="display: grid; grid-template-columns: repeat(5, 52px); grid-auto-rows: 52px; gap: 6px">
+            <sc-for list="{{cells}}" as="c" hint-placeholder-count="30">
+              <button type="button" role="option" aria-selected="{{c.on}}" aria-label="{{c.label}}" disabled="{{c.empty}}" onClick="{{c.pick}}" style="{{c.style}}">
+                <span aria-hidden="true" style="font-size: 24px; line-height: 1">{{c.icon}}</span>
+                <span aria-hidden="true" style="position: absolute; right: 4px; bottom: 1px; font-size: 11px; font-weight: 700; text-shadow: 0 1px 2px #000">{{c.count}}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+        <p style="margin: 0; display: flex; justify-content: space-between; font-size: 12px; color: {{t.muted}}"><span>{{used}} / 50칸</span><span>보유 골드 <b style="color: {{t.title}}; font-size: 14px">232 G</b></span></p>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":890}}'>
+// 희귀도 색 (items.json의 grades.color와 같음)
+const GRADE = { 일반: '#c9c5d6', 고급: '#6fd39b', 희귀: '#6fa8ff', 영웅: '#c08bff', 전설: '#ffaa55', 신화: '#ff6b7a' };
+const SELL_RATE = 0.4; // 본부 상점
+
+const BAG = [
+  { name: '회복 사탕', icon: '🍬', kind: '소모품', count: 3, desc: 'HP를 60 회복한다.', from: '본부 상점, 덩굴 포식자', price: 20 },
+  { name: '마나 젤리', icon: '🍮', kind: '소모품', count: 2, desc: 'MP를 30 회복한다.', from: '본부 상점', price: 25 },
+  { name: '균열 파편', icon: '💎', kind: '재료', count: 12, desc: '날카로운 초록빛 조각. 장비를 분해하면 나온다.', from: '장비 분해', price: 5 },
+  { name: '몬스터 핵', icon: '🟢', kind: '재료', count: 1, desc: '아직 미약하게 맥동한다.', from: '덩굴 포식자', price: 30 },
+  { name: '덩굴 낫', icon: '🪓', kind: '장비 · 무기', grade: '고급', desc: '덩굴 포식자의 팔이 굳어 만들어진 낫.\n힘 +4 · 민첩 +1 · 추가 옵션: 행운 +1', from: '덩굴 포식자', price: 200 },
+  { name: '잎사귀 망토', icon: '🧥', kind: '장비 · 의상', grade: '일반', desc: '마른 잎이 겹겹이 엮인 망토. 바스락거린다.\n체력 +3', from: '덩굴 포식자', price: 150 },
+  { name: '강철 지휘봉', icon: '🦯', kind: '장비 · 무기', grade: '일반', desc: '마법봉이라기엔 너무 무겁다.\n힘 +3', from: '본부 상점', price: 120 },
+  { name: '가시덩굴 마법봉', icon: '🪄', kind: '장비 · 무기', grade: '희귀', desc: '쥐면 손바닥이 조금 따끔하다.\n마력 +6 · 추가 옵션: 마력 +1', from: '덩굴 포식자', price: 340 },
+];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { dark: true, sel: 0 };
+  }
+
+  theme() {
+    return this.state.dark
+      ? { bg: '#0f0e15', panel: '#1a1823', panel2: '#23202f', line: '#34304a', text: '#e7e3f2', muted: '#a49eba', accent: '#b48cff', accentText: '#160f24', title: '#f2c97a' }
+      : { bg: '#f3f0f8', panel: '#ffffff', panel2: '#ece8f4', line: '#d4cde4', text: '#1d1a28', muted: '#5c5570', accent: '#6b3fd1', accentText: '#ffffff', title: '#9a5b00' };
+  }
+
+  renderVals() {
+    const t = this.theme();
+    const s = this.state;
+    const btn = `height: 30px; padding: 0 12px; border-radius: 8px; font-size: 13px; cursor: pointer; border: 1px solid ${t.line}; background: ${t.panel2}; color: ${t.text}`;
+    const main = `${btn}; border: none; background: ${t.accent}; color: ${t.accentText}; font-weight: 700`;
+
+    const cells = Array.from({ length: 50 }, (_, i) => BAG[i] || null).map((it, i) => {
+      if (!it) return { empty: true, on: 'false', label: '빈 칸', icon: '', count: '', pick: () => {}, style: `position: relative; border-radius: 8px; border: 1px dashed ${t.line}; background: transparent; cursor: default` };
+      const on = s.sel === i;
+      const border = it.grade ? GRADE[it.grade] : t.line;
+      return {
+        empty: false, on: String(on), icon: it.icon, count: it.count > 1 ? it.count : '',
+        label: `${it.name}${it.count ? ` ${it.count}개` : ''}`,
+        pick: () => this.setState({ sel: i }),
+        style: `position: relative; display: grid; place-items: center; padding: 0; border-radius: 8px; cursor: pointer; color: ${t.text}; background: ${t.panel2}; border: 2px solid ${border}; box-shadow: ${on ? `0 0 0 2px ${t.accent}` : 'none'}`,
+      };
+    });
+
+    const it = BAG[s.sel];
+    const sel = it && {
+      ...it,
+      sub: it.grade ? `${it.grade} · ${it.kind}` : it.kind,
+      gradeColor: it.grade ? GRADE[it.grade] : t.muted,
+      sell: `${Math.floor(it.price * SELL_RATE)} G (본부 상점)`,
+      bigStyle: `width: 104px; height: 104px; display: grid; place-items: center; font-size: 56px; border-radius: 12px; background: ${t.panel2}; border: 3px solid ${it.grade ? GRADE[it.grade] : t.line}`,
+      actions: (it.kind === '소모품' ? [['사용', main], ['버리기', btn]] : it.kind === '재료' ? [['버리기', btn]] : [['장착', main], ['분해', btn], ['버리기', btn]])
+        .map(([label, style]) => ({ label, style, act: () => {} })),
+    };
+
+    return {
+      t, cells, sel: sel || {},
+      hasSel: Boolean(sel), noSel: !sel,
+      used: BAG.length,
+    };
+  }
+}
+</script>
+</body>
+</html>

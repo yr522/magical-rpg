@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>전투 전경</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&amp;family=Noto+Sans+KR:wght@300;400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+@property --led-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@keyframes led-spin { to { --led-angle: 360deg; } }
+/* 노란 테두리 위를 작고 밝은 빛 하나가 돌아가는 LED 효과 */
+.led-ring { background: conic-gradient(from var(--led-angle), #e0b62e 0deg, #e0b62e 334deg, #fff2a0 344deg, #ffffff 350deg, #fff2a0 356deg, #e0b62e 360deg); animation: led-spin 2.2s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .led-ring { animation: none; background: #ffd84a; } }
+</style>
+</helmet>
+<section aria-label="전투 전경" style="position: relative; width: 100%; height: 560px; border-radius: 14px; overflow: hidden; border: 1px solid #5a2a35; background: radial-gradient(ellipse at 50% 42%, #3a5a35 0%, #1c2a1d 50%, #0d130e 100%); font-family: 'Noto Sans KR', system-ui, sans-serif; color: #ffffff">
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 168px; background: #0b100c; border-top: 2px solid #3e7a4f"></div>
+
+  <h1 style="position: absolute; left: 28px; top: 20px; margin: 0; font-family: 'Gowun Batang', serif; font-size: 30px; font-weight: 700; color: #ffffff; text-shadow: -1.5px -1.5px 0 #120f1c, 1.5px -1.5px 0 #120f1c, -1.5px 1.5px 0 #120f1c, 1.5px 1.5px 0 #120f1c, 0 3px 10px rgba(0,0,0,0.6)">공원 균열 - 균열의 중심</h1>
+
+  <!-- 라운드 · 차례 · 남은 시간 -->
+  <div style="position: absolute; right: 18px; top: 18px; height: 44px; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-radius: 22px; border: 1px solid rgba(255,255,255,0.55); background: rgba(10,8,18,0.6); font-size: 14px">
+    <span>3라운드</span>
+    <span style="color: #ffd84a; font-weight: 700">· {{turnName}}의 차례</span>
+    <span>· 23초</span>
+  </div>
+
+  <!-- 적 -->
+  <div style="position: absolute; left: 50%; top: 56px; transform: translateX(-50%); width: 380px; display: flex; flex-direction: column; align-items: center; gap: 6px">
+    <p style="margin: 0; font-family: 'Gowun Batang', serif; font-size: 22px; font-weight: 700; text-shadow: -1px -1px 0 #120f1c, 1px -1px 0 #120f1c, -1px 1px 0 #120f1c, 1px 1px 0 #120f1c">덩굴 포식자 <span style="font-size: 16px; color: #ffb3bc">Lv.3</span></p>
+    <div role="img" aria-label="적 HP {{enemyHp}} / 160" style="width: 100%; height: 12px; border-radius: 6px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.35); overflow: hidden"><span style="{{enemyFill}}"></span></div>
+  </div>
+  <svg aria-hidden="true" width="240" height="190" viewBox="0 0 260 200" style="position: absolute; left: 50%; top: 200px; transform: translateX(-50%)">
+    <ellipse cx="130" cy="190" rx="110" ry="10" fill="rgba(0,0,0,0.45)"></ellipse>
+    <path d="M130 30c-38 0-62 34-62 78 0 34 14 64 30 82h64c16-18 30-48 30-82 0-44-24-78-62-78z" fill="#162a1a" stroke="#3e7a4f" stroke-width="3"></path>
+    <path d="M78 96c-30-6-48 10-60 34M182 96c30-6 48 10 60 34M96 60c-14-20-12-38 2-52M164 60c14-20 12-38-2-52" fill="none" stroke="#3e7a4f" stroke-width="5" stroke-linecap="round"></path>
+    <circle cx="130" cy="104" r="16" fill="#7dff9a" opacity="0.85"></circle>
+    <circle cx="130" cy="104" r="28" fill="none" stroke="#7dff9a" stroke-width="2" opacity="0.35"></circle>
+  </svg>
+
+  <!-- 참가자 컷: 좌 우 좌 우 -->
+  <sc-for list="{{members}}" as="m" hint-placeholder-count="4">
+    <div>
+      <!-- 사다리꼴 컷 (차례면 노란 불빛이 테두리를 따라 돈다) -->
+      <div class="{{m.ringClass}}" style="{{m.frameStyle}}">
+        <div role="img" aria-label="{{m.hpLabel}}" title="{{m.hpLabel}}" style="{{m.photoStyle}}">
+          <!-- 프사가 곧 HP 바: 줄어든 만큼 아래에서부터 붉은 그라데이션이 차오른다 -->
+          <!-- 1~2명: 반신 컷인 이미지 (정사각형 프사와 따로 받는 두 번째 사진). 위쪽(얼굴) 기준으로 긴 컷을 꽉 채워 스킬 컷인처럼 드러난다 -->
+          <sc-if value="{{m.tall}}" hint-placeholder-val="{{true}}">
+            <svg aria-hidden="true" viewBox="0 0 100 200" preserveAspectRatio="xMidYMin slice" style="position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1"><circle cx="50" cy="46" r="24" fill="rgba(255,255,255,0.6)"></circle><path d="M42 68h16v12H42z" fill="rgba(255,255,255,0.6)"></path><path d="M8 200V112c0-18 14-30 30-32h24c16 2 30 14 30 32v88z" fill="rgba(255,255,255,0.6)"></path></svg>
+          </sc-if>
+          <!-- 3~4명: 예전처럼 정사각형 프사를 컷 아래쪽에 (시안에서는 사람 모양 그림으로 대신) -->
+          <sc-if value="{{m.short}}" hint-placeholder-val="{{false}}">
+            <svg aria-hidden="true" viewBox="0 0 100 120" preserveAspectRatio="xMidYMax meet" style="position: absolute; left: 0; bottom: 0; width: 100%; height: 92%; z-index: 1"><circle cx="50" cy="42" r="22" fill="rgba(255,255,255,0.6)"></circle><path d="M6 120c0-27 20-45 44-45s44 18 44 45z" fill="rgba(255,255,255,0.6)"></path></svg>
+          </sc-if>
+          <!-- HP 오버레이: 프사보다 항상 위에 -->
+          <span aria-hidden="true" style="{{m.damageStyle}}"></span>
+        </div>
+      </div>
+      <!-- 이름: 컷 아랫면 경계에 걸쳐서 -->
+      <span style="{{m.nameStyle}}">{{m.nameText}}</span>
+      <!-- 말풍선 (컷 옆, 가운데 쪽) -->
+      <sc-if value="{{m.hasBubble}}" hint-placeholder-val="{{true}}">
+        <div style="{{m.bubbleStyle}}">
+          <span style="{{m.tailStyle}}"></span>
+          <span style="position: relative">{{m.bubble}}</span>
+        </div>
+      </sc-if>
+    </div>
+  </sc-for>
+
+  <!-- 바닥 글 상자: 전투 기록 최신 한 줄 -->
+  <div style="position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); width: min(720px, calc(100% - 440px)); box-sizing: border-box; padding: 0 40px; border-radius: 10px; background: rgba(0,0,0,0.62); box-shadow: 0 0 13px 8px rgba(0,0,0,0.62); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); text-shadow: 0 1px 2px rgba(0,0,0,0.5); display: flex; justify-content: center">
+    <p style="margin: 0; padding: 6px 0; max-width: 560px; text-align: center; font-size: 14px; font-weight: 300; white-space: pre-line">{{log}}</p>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"count":{"editor":"enum","options":[1,2,3,4],"default":4},"shape":{"editor":"enum","options":["비스듬한 컷","좁아지는 사다리꼴"],"default":"비스듬한 컷"},"bubbles":{"editor":null},"log":{"editor":"text","default":"덩굴 포식자의 덩굴 휘감기! 덩굴이 조여 온다! 벨라에게 24 데미지."},"enemyHp":{"editor":"int","default":104},"turnId":{"editor":"enum","options":[1,2,3],"default":1},"$preview":{"width":1400,"height":560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const n = Math.min(4, Math.max(1, Number(this.props.count ?? 4)));
+    const slant = (this.props.shape ?? '비스듬한 컷') === '비스듬한 컷';
+    const bubbles = this.props.bubbles ?? { 2: '내 뒤로 와! 저 덩굴은 내가 막을게.', 3: '회복할게, 조금만 버텨!', 4: '……' };
+    const enemyHp = this.props.enemyHp ?? 104;
+
+    const party = [
+      { id: 1, name: '세라', me: true, hp: 108, maxHp: 125, mp: 31, maxMp: 75, turn: true, tint: '#5b3fa0' },
+      { id: 2, name: '벨라', hp: 46, maxHp: 170, mp: 40, maxMp: 45, tint: '#2f5d8a' },
+      { id: 3, name: '루미', hp: 88, maxHp: 105, mp: 52, maxMp: 75, tint: '#8a3f6b' },
+      { id: 4, name: '하나', hp: 0, maxHp: 115, mp: 12, maxMp: 50, down: true, tint: '#4a4a55' },
+    ];
+
+    // 지금 차례인 사람 (노란 불빛)
+    const turnId = Number(this.props.turnId ?? 1);
+    party.forEach((p) => { p.turn = p.id === turnId; });
+    const turnName = (party.find((p) => p.turn) || party[0]).name;
+
+    // 2명 이하면 한쪽에 컷 하나씩 크게, 3명 이상이면 위아래로 나눈다.
+    const tall = n <= 2;
+    const W = 123; // 컷 가로 (예전 184의 2/3)
+    const H = tall ? 372 : 176;
+    const top = (row) => (tall ? 104 : 104 + row * (H + 24));
+
+    const shapes = slant
+      ? { left: 'polygon(0 0, 100% 0, 82% 100%, 0 100%)', right: 'polygon(0 0, 100% 0, 100% 100%, 18% 100%)' }
+      : { left: 'polygon(0 0, 100% 9%, 100% 91%, 0 100%)', right: 'polygon(0 9%, 100% 0, 100% 100%, 0 91%)' };
+
+    const members = party.slice(0, n).map((p, i) => {
+      const left = i % 2 === 0; // 좌 우 좌 우
+      const y = top(Math.floor(i / 2));
+      const side = left ? 'left' : 'right';
+      const clip = shapes[side];
+      const bubble = bubbles[p.id] || '';
+      return {
+        initial: p.name.slice(0, 1),
+        nameText: p.name + (p.me ? ' (나)' : ''),
+        bubble,
+        hasBubble: Boolean(bubble),
+        tall,
+        short: !tall,
+        ringClass: p.turn ? 'led-ring' : '',
+        hpLabel: `${p.name} HP ${p.hp}/${p.maxHp}`,
+        damageStyle: `position: absolute; left: 0; right: 0; bottom: 0; height: ${100 - Math.round((p.hp / p.maxHp) * 100)}%; background: linear-gradient(to top, rgba(255,36,60,0.45) 0%, rgba(255,36,60,0.4) 85%, rgba(255,36,60,0) 100%); transition: height 0.5s ease; pointer-events: none; z-index: 2`,
+        frameStyle: `position: absolute; ${side}: 18px; top: ${y}px; width: ${W}px; height: ${H}px; box-sizing: border-box; padding: ${p.turn ? '4px' : '0'}; clip-path: ${clip}`,
+        photoStyle: `position: relative; width: 100%; height: 100%; clip-path: ${clip}; background: linear-gradient(160deg, ${p.tint} 0%, #14111d 100%); display: grid; place-items: center; ${p.down ? 'filter: grayscale(1) brightness(0.55);' : ''}`,
+        nameStyle: `position: absolute; ${side}: 24px; top: ${y + H - 16}px; z-index: 4; white-space: nowrap; font-family: 'Gowun Batang', serif; font-size: 21px; font-weight: 700; color: ${p.down ? '#bdb8c8' : '#ffffff'}; letter-spacing: 0.5px; text-shadow: -1.5px -1.5px 0 #120f1c, 1.5px -1.5px 0 #120f1c, -1.5px 1.5px 0 #120f1c, 1.5px 1.5px 0 #120f1c, 0 2px 8px rgba(0,0,0,0.7)`,
+        bubbleStyle: `position: absolute; ${side}: ${18 + W + 12}px; top: ${y + 12}px; max-width: 250px; padding: 8px 14px; border-radius: 14px; background: #ffffff; color: #16121f; font-size: 14px; line-height: 1.45; font-weight: 400; word-break: keep-all; overflow-wrap: anywhere; box-shadow: 0 2px 10px rgba(0,0,0,0.35); z-index: 3`,
+        tailStyle: `position: absolute; top: 14px; ${left ? 'left: -5px' : 'right: -5px'}; width: 10px; height: 10px; background: #ffffff; transform: rotate(45deg)`,
+      };
+    });
+
+    return {
+      members,
+      turnName,
+      log: this.props.log ?? '덩굴 포식자의 덩굴 휘감기! 덩굴이 조여 온다! 벨라에게 24 데미지.',
+      enemyHp,
+      enemyFill: `display: block; height: 100%; width: ${Math.round((enemyHp / 160) * 100)}%; background: #ff7a8a`,
+    };
+  }
+}
+</script>
+</body>
+</html>

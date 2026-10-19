@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>필드 화면 시안</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&amp;family=Noto+Sans+KR:wght@300;400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#b48cff}a:hover{color:#d2b8ff}
+button{font-family:inherit}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #b48cff;outline-offset:2px}
+</style>
+</helmet>
+<div style="min-height: 890px; width: 100%; box-sizing: border-box; padding: 20px; display: flex; flex-direction: column; gap: 14px; font-family: 'Noto Sans KR', system-ui, sans-serif; font-size: 15px; line-height: 1.55; background: {{t.bg}}; color: {{t.text}}">
+
+  <!-- 맵 전경 -->
+  <section aria-label="맵 전경" style="position: relative; height: 560px; border-radius: 14px; overflow: hidden; border: 1px solid {{t.line}}; background: {{zone.sky}}">
+    <!-- 바닥(땅) -->
+    <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 168px; background: {{zone.ground}}; border-top: 2px solid {{zone.groundEdge}}"></div>
+
+    <!-- 지역 - 맵 이름 (테두리 글씨) -->
+    <h1 style="position: absolute; left: 28px; top: 20px; margin: 0; font-family: 'Gowun Batang', serif; font-size: 30px; font-weight: 700; color: #ffffff; letter-spacing: 0.5px; text-shadow: -1.5px -1.5px 0 #120f1c, 1.5px -1.5px 0 #120f1c, -1.5px 1.5px 0 #120f1c, 1.5px 1.5px 0 #120f1c, 0 3px 10px rgba(0,0,0,0.6)">{{zone.region}} - {{zone.name}}</h1>
+
+    <!-- 파티 정보 (파티에 들어가 있을 때만): 맵 이름 아래, 나 포함 -->
+    <sc-if value="{{inParty}}" hint-placeholder-val="{{true}}">
+      <ul aria-label="파티원" style="position: absolute; left: 28px; top: 142px; z-index: 2; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; width: 230px">
+        <sc-for list="{{party}}" as="pm" hint-placeholder-count="3">
+          <li style="display: flex; align-items: center; gap: 10px; padding: 6px 10px 6px 6px; border-radius: 8px; background: rgba(0,0,0,0.5); color: #ffffff">
+            <span aria-hidden="true" style="{{pm.avatar}}"></span>
+            <span style="min-width: 0; display: flex; flex-direction: column; line-height: 1.35">
+              <span style="font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="font-size: 12px; opacity: 0.75">Lv.{{pm.level}}</span> <b style="font-weight: 700; color: {{pm.nameColor}}">{{pm.name}}</b><sc-if value="{{pm.leader}}" hint-placeholder-val="{{false}}"> <span aria-label="파티장" style="font-size: 12px">👑</span></sc-if></span>
+              <span style="font-size: 10px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{pm.where}}</span>
+            </span>
+          </li>
+        </sc-for>
+      </ul>
+    </sc-if>
+
+    <!-- 같은 구역 사람 버튼 -->
+    <button type="button" onClick="{{togglePeople}}" aria-expanded="{{peopleOpenText}}" aria-label="이곳의 계약자 목록" style="position: absolute; right: 18px; top: 18px; z-index: 3; height: 44px; padding: 0 14px; display: flex; align-items: center; gap: 8px; border-radius: 22px; border: 1px solid rgba(255,255,255,0.55); background: rgba(10,8,18,0.55); color: #ffffff; font-size: 14px; cursor: pointer">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M16 14.2c3 .2 5.5 2.4 5.5 5.8"></path></svg>
+      <span>{{peopleCount}}</span>
+    </button>
+    <sc-if value="{{peopleOpen}}" hint-placeholder-val="{{false}}">
+      <div style="position: absolute; right: 18px; top: 72px; z-index: 2; width: 300px; max-height: 230px; overflow-y: auto; box-sizing: border-box; padding: 14px 16px; border-radius: 12px; background: rgba(5,4,10,0.72); color: #ffffff">
+        <p style="margin: 0 0 8px; font-size: 13px; color: #c9c3dc">이곳의 계약자</p>
+        <sc-for list="{{people}}" as="p" hint-placeholder-count="3">
+          <div style="padding: 5px 0; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.1)">
+            <span style="color: #c9c3dc">Lv.{{p.level}}</span>
+            <span style="color: #f2c97a">{{p.titleText}}</span>
+            <span style="font-weight: 500">{{p.name}}</span><span style="color: #b48cff">{{p.meText}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- 바닥 위 텍스트: 맵 묘사 · 둘러보기 결과 · NPC 대사 · 선택지 -->
+    <sc-if value="{{captionVisible}}" hint-placeholder-val="{{true}}">
+      <div style="position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); width: min(1040px, calc(100% - 56px)); box-sizing: border-box; padding: 0 64px; border-radius: 10px; background: rgba(0,0,0,0.62); box-shadow: 0 0 13px 8px rgba(0,0,0,0.62); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 16px">
+        <div style="flex: 1; min-width: 0; display: flex; justify-content: center"><p style="margin: 0; padding: 3px 0; max-width: 560px; text-align: center; font-size: 14px; font-weight: 300; white-space: pre-line">{{captionText}}</p></div>
+        <sc-if value="{{hasChoices}}" hint-placeholder-val="{{false}}">
+          <div style="display: flex; gap: 8px; flex: none">
+            <sc-for list="{{choices}}" as="c" hint-placeholder-count="2">
+              <button type="button" onClick="{{c.pick}}" style="min-height: 32px; margin: 3px 0; padding: 0 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.8); background: rgba(255,255,255,0.12); color: #ffffff; font-size: 14px; cursor: pointer">{{c.label}}</button>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{noChoices}}" hint-placeholder-val="{{true}}">
+          <button type="button" onClick="{{hideCaption}}" aria-label="글 닫기" style="flex: none; width: 30px; height: 30px; border-radius: 15px; border: none; background: transparent; color: #ffffff; cursor: pointer">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+          </button>
+        </sc-if>
+      </div>
+    </sc-if>
+  </section>
+
+  <!-- 아래 줄: 채팅 · 인터랙티브 메뉴 · 프로필 · 유저 메뉴 · 시스템 메뉴 -->
+  <div style="display: flex; gap: 14px; height: 240px">
+
+    <!-- 채팅 -->
+    <section aria-label="채팅" style="flex: 1 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; gap: 6px">
+        <sc-for list="{{chatTabs}}" as="tab" hint-placeholder-count="3">
+          <button type="button" onClick="{{tab.toggle}}" aria-pressed="{{tab.pressed}}" title="{{tab.stateText}}" style="{{tab.style}}">{{tab.label}}</button>
+        </sc-for>
+      </div>
+      <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.panel}}; overflow: hidden">
+        <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 7px">
+          <sc-for list="{{messages}}" as="m" hint-placeholder-count="4">
+            <div style="display: flex; gap: 8px; align-items: flex-start; font-size: 14px">
+              <span style="flex: none; width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: {{m.avatarBg}}; color: {{m.avatarFg}}">{{m.initial}}</span>
+              <span style="min-width: 0; padding-top: 2px">
+                <span style="font-size: 12px; color: {{m.tagColor}}">[{{m.tag}}]</span>
+                <span style="font-weight: 700">{{m.nameText}}</span>
+                <span style="color: {{m.textColor}}">{{m.text}}</span>
+              </span>
+            </div>
+          </sc-for>
+          <sc-if value="{{noMessages}}" hint-placeholder-val="{{false}}">
+            <p style="margin: 0; color: {{t.muted}}; font-size: 14px">켜진 채팅 채널이 없어요. 위의 버튼으로 켜 보세요.</p>
+          </sc-if>
+        </div>
+        <form onSubmit="{{send}}" style="display: flex; gap: 8px; padding: 10px; border-top: 1px solid {{t.line}}">
+          <label style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)" for="send-channel">보낼 채널</label>
+          <select id="send-channel" value="{{sendChannel}}" onChange="{{pickChannel}}" style="height: 44px; padding: 0 10px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.panel2}}; color: {{t.text}}; font-size: 14px">
+            <option value="지역">지역</option>
+            <option value="서버">서버</option>
+          </select>
+          <label style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)" for="chat-text">메시지</label>
+          <input id="chat-text" value="{{draft}}" onChange="{{onDraft}}" placeholder="메시지 입력" autocomplete="off" style="flex: 1; min-width: 0; height: 44px; box-sizing: border-box; padding: 0 12px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.panel2}}; color: {{t.text}}; font-size: 14px">
+          <button type="submit" style="height: 44px; padding: 0 18px; border-radius: 8px; border: 1px solid {{t.accent}}; background: {{t.accent}}; color: {{t.accentText}}; font-size: 14px; font-weight: 700; cursor: pointer">전송</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- 프로필 카드 + 행동 메뉴: 칸 나눔 없이 한 배경 안에 (프로필 왼쪽, 메뉴 오른쪽) -->
+    <div style="flex: 0 0 500px; display: flex; border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.panel}}; overflow: hidden">
+      <section aria-label="내 캐릭터" style="flex: 0 0 196px; box-sizing: border-box; padding: 8px 6px 12px; display: flex; flex-direction: column; align-items: center; position: relative">
+        <span style="position: absolute; left: 12px; top: 6px; font-family: 'Gowun Batang', serif; font-size: 18px; font-weight: 700; color: {{t.accent}}">Lv.3</span>
+        <div role="img" aria-label="세라 프로필 사진" style="position: relative; width: 112px; height: 112px; flex: none; box-sizing: border-box; border-radius: 50%; border: 3px solid {{t.accent}}; background: linear-gradient(160deg, #5b3fa0 0%, #14111d 100%); overflow: hidden"><!-- 커스텀 프사 자리 (시안에서는 사람 모양 그림으로 대신) --><svg aria-hidden="true" viewBox="0 0 100 100" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%"><circle cx="50" cy="40" r="18" fill="rgba(255,255,255,0.6)"></circle><path d="M14 100c0-22 16-38 36-38s36 16 36 38z" fill="rgba(255,255,255,0.6)"></path></svg></div>
+        <p style="margin: 4px 0 0; font-size: 12px; line-height: 1.2; color: {{t.title}}">[견습 계약자]</p>
+        <p style="margin: 0; font-size: 17px; line-height: 1.25; font-weight: 700">세라</p>
+        <div style="width: 100%; margin-top: auto; padding-top: 10px; display: flex; flex-direction: column; gap: 2px">
+          <sc-for list="{{bars}}" as="b" hint-placeholder-count="3">
+            <div style="display: flex; align-items: center; gap: 3px; font-size: 10px; line-height: 12px; color: {{t.muted}}">
+              <span style="flex: none; width: 21px; font-weight: 700">{{b.label}}</span>
+              <span style="flex: 1; height: 6px; background: {{t.panel2}}; overflow: hidden"><span style="{{b.fill}}"></span></span>
+              <span style="flex: none; width: 42px; text-align: right">{{b.value}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+      <!-- 행동 메뉴: 아이콘 + 글씨 타일 -->
+      <nav aria-label="이곳에서 할 수 있는 일" style="flex: 1 1 280px; min-width: 0; box-sizing: border-box; padding: 12px 14px 12px 4px">
+        <sc-if value="{{menuMain}}" hint-placeholder-val="{{true}}">
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 66px; gap: 8px">
+            <sc-for list="{{mainMenu}}" as="item" hint-placeholder-count="3">
+              <button type="button" onClick="{{item.act}}" style="{{item.style}}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{item.icon}}"></path></svg><span>{{item.label}}</span></button>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{menuMove}}" hint-placeholder-val="{{false}}">
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 66px; gap: 8px">
+            <sc-for list="{{exits}}" as="ex" hint-placeholder-count="3">
+              <button type="button" onClick="{{ex.go}}" style="{{ex.style}}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ex.icon}}"></path></svg><span>{{ex.label}}</span></button>
+            </sc-for>
+            <button type="button" onClick="{{backToMenu}}" style="{{backStyle}}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{backIcon}}"></path></svg><span>뒤로</span></button>
+          </div>
+        </sc-if>
+      </nav>
+    </div>
+
+    <!-- 오른쪽 아이콘 메뉴: 장비 · 인벤토리 · 스테이터스 · 프로필 · 파티 · 설정 -->
+    <nav aria-label="메뉴" style="position: relative; flex: 0 0 34px; display: flex; flex-direction: column; gap: 7px">
+      <button type="button" onClick="{{openEquip}}" aria-label="장비" title="장비" style="{{iconBtn}}">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"></path></svg>
+      </button>
+      <button type="button" onClick="{{openInventory}}" aria-label="인벤토리" title="인벤토리" style="{{iconBtn}}">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1.2 12H6.2z"></path><path d="M9 8V6a3 3 0 0 1 6 0v2"></path></svg>
+      </button>
+      <button type="button" onClick="{{openStatus}}" aria-label="스테이터스" title="스테이터스" style="{{iconBtn}}">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V11"></path><path d="M12 20V4"></path><path d="M19 20v-6"></path></svg>
+      </button>
+      <button type="button" onClick="{{openProfile}}" aria-label="프로필" title="프로필" style="{{iconBtn}}">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="9" cy="11" r="2.2"></circle><path d="M5.8 16c.6-1.6 1.8-2.4 3.2-2.4s2.6.8 3.2 2.4"></path><path d="M14.5 10h3.5M14.5 13.5h3.5"></path></svg>
+      </button>
+      <button type="button" onClick="{{community}}" aria-label="파티 · 친구" title="파티 · 친구" style="{{iconBtn}}">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M16 14.2c3 .2 5.5 2.4 5.5 5.8"></path></svg>
+      </button>
+      <button type="button" onClick="{{toggleSettings}}" aria-label="설정" title="설정" aria-expanded="{{settingsExpanded}}" style="{{settingsBtn}}">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      </button>
+      <!-- 설정을 누르면 설정 버튼 옆에 가로로 펼쳐진다 -->
+      <sc-if value="{{settingsOpen}}" hint-placeholder-val="{{false}}">
+        <div role="group" aria-label="설정 메뉴" style="position: absolute; right: 44px; bottom: 0; z-index: 5; display: flex; gap: 8px; padding: 6px; border-radius: 14px; border: 1px solid #ffd84a; background: {{t.panel}}; box-shadow: 0 6px 20px rgba(0,0,0,0.45)">
+          <button type="button" disabled="" aria-label="음향 조절 (준비 중)" title="음향 조절 (준비 중)" style="{{iconBtnOff}}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9z"></path><path d="M16.5 8.5a5 5 0 0 1 0 7"></path></svg>
+          </button>
+          <button type="button" onClick="{{toggleTheme}}" aria-label="테마 바꾸기" title="테마 바꾸기" style="{{iconBtn}}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"></path></svg>
+          </button>
+          <button type="button" onClick="{{switchChar}}" aria-label="캐릭터 변경" title="캐릭터 변경" style="{{iconBtn}}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h11l-3-3"></path><path d="M17 17H6l3 3"></path></svg>
+          </button>
+          <button type="button" onClick="{{logout}}" aria-label="로그아웃" title="로그아웃" style="{{iconBtn}}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"></path><path d="M10 16l-4-4 4-4"></path><path d="M6 12h10"></path></svg>
+          </button>
+        </div>
+      </sc-if>
+    </nav>
+  </div>
+
+  <!-- 하단 상태 줄 -->
+  <footer style="display: flex; gap: 24px; font-size: 12px; color: {{t.muted}}">
+    <span style="display: inline-flex; align-items: center; gap: 8px">
+      <span>v.1</span>
+      <button type="button" onClick="{{cycleConn}}" aria-label="서버 연결: {{connLabel}} (시안: 누르면 상태가 바뀜)" title="서버 연결: {{connLabel}}" style="width: 20px; height: 20px; padding: 0; border: none; background: transparent; display: grid; place-items: center; cursor: pointer"><span style="{{connDot}}"></span></button>
+      <span>· 3명 접속 중</span>
+    </span>
+    <a href="Battle.dc.html" style="margin-left: auto; font-size: 14px; font-weight: 700">시안: 전투 화면 보기 →</a>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":890}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.zones = {
+      forest: {
+        region: '공원 균열', name: '숲길',
+        sky: 'linear-gradient(180deg, #1c2b26 0%, #243a30 55%, #1a2a22 100%)', ground: '#16201a', groundEdge: '#2f4a3a',
+        desc: '나무들이 서로 엉켜 하늘을 가린다. 잎사귀 사이로 무언가가 숨을 쉰다.',
+        look: '나무껍질에 아이들이 새긴 이름들이 있다. 몇몇 이름 위로 새 가지가 자라 덮였다.\n벨라, 하나이(가) 여기 있다.',
+        exits: [['북쪽 · 산책로', 'trail'], ['서쪽 · 분수 광장', 'fountain'], ['남쪽 · 균열의 중심', 'core']],
+      },
+      trail: {
+        region: '공원 균열', name: '산책로',
+        sky: 'linear-gradient(180deg, #22263a 0%, #2b3046 60%, #1f2233 100%)', ground: '#1a1b26', groundEdge: '#3a3d55',
+        desc: '가로등이 하나 걸러 하나씩 꺼져 있는 길. 발밑의 흙이 이상하게 따뜻하다.',
+        look: '벤치에 누군가의 운동화 한 짝이 놓여 있다. 주인은 보이지 않는다.',
+        exits: [['남쪽 · 숲길', 'forest']],
+      },
+      fountain: {
+        region: '공원 균열', name: '분수 광장',
+        sky: 'linear-gradient(180deg, #1b2a33 0%, #23394a 60%, #182630 100%)', ground: '#141e24', groundEdge: '#2c4655',
+        desc: '말라붙은 분수 바닥에 덩굴이 뿌리를 내렸다. 덩굴은 아주 천천히 움직인다.',
+        look: '분수 바닥에 던져진 동전들 사이로, 아직 소원을 기다리는 것 같은 빛이 깜빡인다.',
+        exits: [['동쪽 · 숲길', 'forest']],
+      },
+      core: {
+        region: '공원 균열', name: '균열의 중심',
+        sky: 'radial-gradient(ellipse at 50% 40%, #2f5a3b 0%, #1a2b20 55%, #0f1812 100%)', ground: '#0d140f', groundEdge: '#3e7a4f',
+        desc: '공기가 찢어진 자리. 초록빛 틈새에서 낮은 웅웅거림이 새어 나온다.',
+        look: '틈새 너머는 보이지 않는다. 오래 바라보면 누군가 이쪽을 마주 보는 기분이 든다.',
+        exits: [['북쪽 · 숲길', 'forest']],
+        raid: true,
+      },
+    };
+    this.state = {
+      dark: true,
+      zoneId: 'forest',
+      caption: this.zones.forest.desc,
+      choices: null,
+      peopleOpen: false,
+      menu: 'main',
+      tabs: { 서버: true, 지역: true, 시스템: true },
+      settingsOpen: false,
+      conn: 0,
+      sendChannel: '지역',
+      draft: '',
+      messages: [
+        { ch: '시스템', name: '', text: '벨라이(가) 도착했다.' },
+        { ch: '지역', name: '세라', text: '안녕? 난 빛의 힘을 가진 마법소녀야!' },
+        { ch: '서버', name: '루미', text: '덩굴 포식자 같이 잡을 사람?' },
+        { ch: '시스템', name: '', text: '[토벌 완료] 균열의 중심의 덩굴 포식자를 루미이(가) 처치했다!' },
+        { ch: '지역', name: '벨라', text: '나 방금 초록 핵 브로치 나왔어' },
+      ],
+    };
+  }
+
+  theme() {
+    return this.state.dark
+      ? { bg: '#0f0e15', panel: '#1a1823', panel2: '#23202f', line: '#34304a', text: '#e7e3f2', muted: '#a49eba', accent: '#b48cff', accentText: '#160f24', title: '#f2c97a', system: '#7fc8c2', server: '#f2c97a' }
+      : { bg: '#f3f0f8', panel: '#ffffff', panel2: '#ece8f4', line: '#d4cde4', text: '#1d1a28', muted: '#5c5570', accent: '#6b3fd1', accentText: '#ffffff', title: '#9a5b00', system: '#0e6f68', server: '#9a5b00' };
+  }
+
+  show(text, choices) {
+    this.setState({ caption: text, choices: choices || null });
+  }
+
+  goTo(id) {
+    const z = this.zones[id];
+    this.setState({ zoneId: id, menu: 'main', caption: z.desc, choices: null });
+    this.addMessage({ ch: '시스템', name: '', text: `${z.name}에 도착했다.` });
+  }
+
+  addMessage(m) {
+    this.setState((s) => ({ messages: [...s.messages, m].slice(-40) }));
+  }
+
+  renderVals() {
+    const t = this.theme();
+    const s = this.state;
+    const zone = this.zones[s.zoneId];
+    const channelColor = { 서버: t.server, 지역: t.accent, 시스템: t.system };
+
+    const people = [
+      { level: 3, title: '견습 계약자', name: '세라', me: true },
+      { level: 4, title: '', name: '벨라' },
+      { level: 2, title: '균열 첫 토벌', name: '하나' },
+    ].map((p) => ({ ...p, titleText: p.title ? `[${p.title}]` : '', meText: p.me ? ' (나)' : '' }));
+
+    const chatTabs = ['서버', '지역', '시스템'].map((label) => {
+      const on = s.tabs[label];
+      return {
+        label,
+        pressed: on ? 'true' : 'false',
+        stateText: on ? `${label} 채팅 켜짐 (누르면 숨김)` : `${label} 채팅 꺼짐 (누르면 보임)`,
+        toggle: () => this.setState((st) => ({ tabs: { ...st.tabs, [label]: !st.tabs[label] } })),
+        style: `min-height: 36px; padding: 0 16px; border-radius: 10px 10px 4px 4px; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid ${on ? channelColor[label] : t.line}; background: ${on ? t.panel2 : 'transparent'}; color: ${on ? channelColor[label] : t.muted}`,
+      };
+    });
+
+    const messages = s.messages.filter((m) => s.tabs[m.ch]).map((m) => ({
+      tag: m.ch,
+      tagColor: channelColor[m.ch],
+      nameText: m.name ? `${m.name}:` : '',
+      text: m.text,
+      textColor: m.ch === '시스템' ? t.system : t.text,
+      initial: m.name ? m.name.slice(0, 1) : '!',
+      avatarBg: m.name ? t.panel2 : 'transparent',
+      avatarFg: m.name ? t.accent : t.system,
+    }));
+
+    // 타일 아이콘 (선 하나로 그린 모양)
+    const ICONS = {
+      이동: 'M5 12h14M13 6l6 6-6 6',
+      둘러보기: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0',
+      '토벌 목록': 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01',
+      '토벌 입장': 'M14.5 4.5L20 4l-.5 5.5L9 20l-5-5zM7 13l4 4',
+      공격: 'M14.5 4.5L20 4l-.5 5.5L9 20l-5-5zM7 13l4 4',
+      스킬: 'M12 3l2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z',
+      아이템: 'M9 3h6M10 3v5l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3',
+      방어: 'M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z',
+      도주: 'M15 12H3M7 8l-4 4 4 4M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4',
+      뒤로: 'M19 12H5M11 6l-6 6 6 6',
+    };
+    const tile = `display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 4px; border-radius: 10px; border: 1px solid ${t.line}; background: ${t.panel2}; color: ${t.text}; font-size: 12px; line-height: 1.25; text-align: center; cursor: pointer`;
+    const tileBack = `${tile}; background: transparent; color: ${t.muted}`;
+    const menuButton = tile;
+    const mainMenu = [
+      { label: '이동', act: () => this.setState({ menu: 'move' }) },
+      { label: '둘러보기', act: () => this.show(zone.look) },
+      { label: '토벌 목록', act: () => this.show('공원 균열 › 균열의 중심 — 덩굴 포식자 Lv.3 (등급: 약함 · 무기한 · 참가 1/4)') },
+    ];
+    if (zone.raid) {
+      mainMenu.unshift({
+        label: '토벌 입장',
+        danger: true,
+        act: () => this.show('균열의 틈새가 크게 벌어진다. 덩굴 포식자가 이쪽을 노려본다.\n들어가시겠습니까?', [
+          { label: '1. 들어간다', pick: () => this.show('(시안) 여기서 전투 화면으로 넘어갑니다.') },
+          { label: '2. 물러난다', pick: () => this.show(zone.desc) },
+        ]),
+      });
+    }
+    mainMenu.forEach((m) => {
+      m.icon = ICONS[m.label];
+      m.style = m.danger ? `${menuButton}; border-color: #ff7a8a; color: ${this.state.dark ? '#ff9aa6' : '#b4233a'}` : menuButton;
+    });
+
+    const exits = zone.exits.map(([label, id]) => ({ label, go: () => this.goTo(id), icon: ICONS.이동, style: `${tile}; border-color: ${t.accent}` }));
+
+    const bar = (label, value, max, color) => ({
+      label,
+      value: `${value}/${max}`,
+      fill: `display: block; height: 100%; width: ${Math.round((value / max) * 100)}%; background: ${color}`,
+    });
+
+    return {
+      t,
+      zone,
+      // 파티 정보 (시안: 파티에 들어가 있는 상태)
+      inParty: true,
+      party: [
+        { name: '세라', level: 3, me: true, leader: true, where: `${zone.region} - ${zone.name}`, tint: '#5b3fa0' },
+        { name: '릴리', level: 5, where: '공원 균열 - 균열의 중심', tint: '#2f6f8f' },
+        { name: '벨라', level: 4, where: '본부 - 광장', tint: '#8f4a2f' },
+      ].map((m) => ({
+        ...m,
+        nameColor: m.me ? '#cdb3ff' : '#ffffff',
+        avatar: `flex: none; width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(160deg, ${m.tint} 0%, #14111d 100%)`,
+      })),
+      people,
+      peopleCount: people.length,
+      peopleOpen: s.peopleOpen,
+      peopleOpenText: s.peopleOpen ? 'true' : 'false',
+      togglePeople: () => this.setState((st) => ({ peopleOpen: !st.peopleOpen })),
+      captionVisible: Boolean(s.caption),
+      captionText: s.caption || '',
+      hasChoices: Boolean(s.choices),
+      noChoices: !s.choices,
+      choices: s.choices || [],
+      hideCaption: () => this.setState({ caption: null }),
+      chatTabs,
+      messages,
+      noMessages: messages.length === 0,
+      sendChannel: s.sendChannel,
+      pickChannel: (e) => this.setState({ sendChannel: e.target.value }),
+      draft: s.draft,
+      onDraft: (e) => this.setState({ draft: e.target.value }),
+      send: (e) => {
+        e.preventDefault();
+        const text = s.draft.trim();
+        if (!text) return;
+        this.addMessage({ ch: s.sendChannel, name: '세라', text });
+        this.setState({ draft: '' });
+      },
+      menuMain: s.menu === 'main',
+      menuMove: s.menu === 'move',
+      mainMenu,
+      exits,
+      backToMenu: () => this.setState({ menu: 'main' }),
+      backIcon: ICONS.뒤로,
+      backStyle: tileBack,
+      bars: [
+        bar('HP', 108, 125, '#6fd39b'),
+        bar('MP', 31, 75, '#6fa8ff'),
+        bar('EXP', 90, 150, t.accent),
+      ],
+      userMenu: [
+        { label: '장비', act: () => this.show('(시안) 장비 창이 열립니다. 무기 · 의상 · 장신구 3칸.') },
+        { label: '인벤토리', act: () => this.show('(시안) 인벤토리 창이 열립니다. 골드는 여기서 보입니다. — 232 G') },
+        { label: '스테이터스', act: () => this.show('(시안) 스테이터스 창이 열립니다. 스탯 분배, 스킬 목록.') },
+        { label: '프로필', act: () => this.show('(시안) OC 프로필 창이 열립니다. 프로필 사진, 외형, 성격, 설정, 소개글, 커스텀 대사, 관계.') },
+      ],
+      openEquip: () => this.show('(시안) 장비 창이 열립니다. 무기 · 의상 · 장신구 3칸.'),
+      openInventory: () => this.show('(시안) 인벤토리 창이 열립니다. 골드는 여기서 보입니다. — 232 G'),
+      openStatus: () => this.show('(시안) 스테이터스 창이 열립니다. 스탯 분배, 스킬 목록.'),
+      openProfile: () => this.show('(시안) OC 프로필 창이 열립니다. 프로필 사진, 외형, 성격, 설정, 소개글, 커스텀 대사, 관계.'),
+      settingsOpen: s.settingsOpen,
+      settingsExpanded: s.settingsOpen ? 'true' : 'false',
+      toggleSettings: () => this.setState((st) => ({ settingsOpen: !st.settingsOpen })),
+      iconBtn: `width: 34px; height: 34px; flex: none; border-radius: 12px; border: 1px solid ${t.line}; background: ${t.panel}; color: ${t.text}; display: grid; place-items: center; cursor: pointer`,
+      iconBtnOff: `width: 34px; height: 34px; flex: none; border-radius: 12px; border: 1px solid ${t.line}; background: ${t.panel}; color: ${t.muted}; opacity: 0.55; display: grid; place-items: center`,
+      settingsBtn: s.settingsOpen
+        ? 'width: 34px; height: 34px; border-radius: 12px; border: 1px solid #ffd84a; background: rgba(255,216,74,0.16); color: #ffd84a; display: grid; place-items: center; cursor: pointer; box-shadow: 0 0 10px rgba(255,216,74,0.45)'
+        : `width: 34px; height: 34px; border-radius: 12px; border: 1px solid ${t.line}; background: ${t.panel}; color: ${t.text}; display: grid; place-items: center; cursor: pointer`,
+      connLabel: ['원활', '불안정', '나쁨'][s.conn],
+      connDot: `display: block; width: 9px; height: 9px; border-radius: 50%; background: ${['#4fd27a', '#ffa53d', '#ff5a5a'][s.conn]}; box-shadow: 0 0 6px ${['rgba(79,210,122,0.7)', 'rgba(255,165,61,0.7)', 'rgba(255,90,90,0.7)'][s.conn]}`,
+      cycleConn: () => this.setState((st) => ({ conn: (st.conn + 1) % 3 })),
+      toggleTheme: () => this.setState((st) => ({ dark: !st.dark })),
+      switchChar: () => { this.setState({ settingsOpen: false }); this.show('(시안) 캐릭터 선택 화면으로 돌아갑니다.'); },
+      logout: () => { this.setState({ settingsOpen: false }); this.show('(시안) 로그아웃합니다.'); },
+      community: () => this.show('(시안) 파티 · 친구 창이 열립니다. 친구 추가, 파티 초대.'),
+    };
+  }
+}
+</script>
+</body>
+</html>
