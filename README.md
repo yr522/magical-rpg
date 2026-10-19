@@ -143,7 +143,7 @@ DB 설정이 없어도 `data/local-db.json` 파일에 저장되면서 돌아간�
 
 ### ① Supabase (DB)
 
-1. <https://supabase.com> 가입 → **New project** (비밀번호는 따로 적어 두기, 지역은 Northeast Asia (Seoul) 추천)
+1. <https://supabase.com> 가입 → **New project** (비밀번호는 따로 적어 두기, 지역은 **Southeast Asia (Singapore)** — Render 서버와 같은 곳이어야 빠르다)
 2. 프로젝트 화면 위쪽의 **Connect** 버튼 → **Session pooler** 탭의 연결 주소를 복사
    - `postgresql://postgres.xxxx:[YOUR-PASSWORD]@aws-...pooler.supabase.com:5432/postgres` 모양
    - `[YOUR-PASSWORD]` 자리에 1번에서 정한 비밀번호를 넣는다
@@ -154,7 +154,7 @@ DB 설정이 없어도 `data/local-db.json` 파일에 저장되면서 돌아간�
 
 1. <https://render.com> 에 GitHub 계정으로 가입
 2. **New → Blueprint** → `yr522/magical-rpg` 저장소 선택 → 브랜치 선택
-   (이 저장소의 `render.yaml`을 읽어 설정이 자동으로 채워진다)
+   (이 저장소의 `render.yaml`을 읽어 설정이 자동으로 채워진다. 서버 위치도 싱가포르로 정해진다)
 3. `DATABASE_URL` 칸에 ①에서 복사한 주소를 붙여 넣고, `ADMIN_CODE` 칸에 나만 아는 비밀 코드를 적고 **Apply**
    (그 다음 닉네임 `admin`, 초대 코드 칸에 그 비밀 코드를 적어 가입하면 관리자 계정이 된다)
 4. 배포가 끝나면 `https://magical-rpg-xxxx.onrender.com` 같은 주소가 생긴다. 이 주소를 지인들에게 공유
