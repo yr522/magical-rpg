@@ -7,7 +7,7 @@
       "name": "본부 상점",
       "buyRate": 1.0,
       "sellRate": 0.4,
-      "sells": ["heal_candy", "mana_jelly", "star_rod", "steel_baton", "frill_dress", "wind_bell", "apprentice_wand", "apprentice_ribbon", "apprentice_brooch"]
+      "sells": ["heal_candy", "mana_jelly", "star_rod", "steel_baton", "frill_dress", "wind_bell", "apprentice_wand", "apprentice_ribbon", "apprentice_brooch", "star_hairpin", "leather_boots"]
     }
   ]
 }

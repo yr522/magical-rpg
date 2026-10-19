@@ -20,6 +20,7 @@ const GLOBAL_HISTORY = 50;
 const MAX_CHARACTERS_PER_USER = 5;
 
 const DEATH_GOLD_PENALTY = 0.1;
+const BAG_SIZE = game.characterData.bagSize; // 가방 최대 칸 수
 
 const zoneRoom = (zoneId) => `zone:${zoneId}`;
 const battleRoom = (eventId) => `battle:${eventId}`;
@@ -150,9 +151,13 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
         row.mp = p.mp;
         row.gold += gold;
         const levels = game.gainExp(row, exp);
-        const drops = game.rollDrops(def.drops, rng);
+        const rolled = game.rollDrops(def.drops, rng);
+        // 가방(최대 칸)이 넘치면 넘치는 아이템은 못 가져온다.
+        const owned = await store.listItemRows(row.id);
+        const drops = [];
+        for (const d of rolled) if (game.bagCellsAfter(owned, [...drops, d]) <= BAG_SIZE) drops.push(d);
         await store.addItems(row.id, drops);
-        Object.assign(outcome, { exp, gold, levelUp: levels, items: drops.map((d) => game.itemView(d)) });
+        Object.assign(outcome, { exp, gold, levelUp: levels, items: drops.map((d) => game.itemView(d)), bagFull: drops.length < rolled.length });
       } else {
         // 전멸: 보유 골드 10% 손실, 본부로 귀환 (본부에서 HP/MP 회복).
         const lost = Math.floor(row.gold * DEATH_GOLD_PENALTY);
@@ -229,18 +234,22 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
 
   async function inventoryView(entry) {
     const shop = game.shopInZone(entry.row.location_id);
+    // 판매가는 상점이 없는 곳에서도 보여 준다 (그 구역 상점, 없으면 첫 상점 기준).
+    const priceShop = shop || game.shops.values().next().value;
     const rows = (await store.listItemRows(entry.row.id)).filter((it) => game.items.has(it.code));
-    const equipment = rows.filter((it) => game.items.get(it.code).kind === 'equipment').map((it) => game.itemView(it, shop));
+    const equipment = rows.filter((it) => game.items.get(it.code).kind === 'equipment').map((it) => game.itemView(it, priceShop));
     const stacks = new Map();
     for (const it of rows.filter((r) => game.items.get(r.code).kind !== 'equipment')) {
-      if (!stacks.has(it.code)) stacks.set(it.code, { ...game.itemView(it, shop), id: undefined, count: 0 });
+      if (!stacks.has(it.code)) stacks.set(it.code, { ...game.itemView(it, priceShop), id: undefined, count: 0 });
       stacks.get(it.code).count += 1;
     }
     return {
       character: game.characterView(entry.row),
       equipment,
       stacks: [...stacks.values()],
+      bag: { used: game.bagCells(rows), size: BAG_SIZE },
       shop: shop && { id: shop.id, name: shop.name },
+      priceShop: priceShop && priceShop.name,
     };
   }
 
@@ -567,10 +576,20 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
       reply({ ok: true, message: result.message, ...(await inventoryView(entry)) });
     });
 
-    itemCommand('inventory:equip', async (entry, { id }) => {
+    itemCommand('inventory:equip', async (entry, { id, slot }) => {
       const item = await findOwnedItem(entry, { id });
-      if (!item || game.items.get(item.code)?.kind !== 'equipment') return { error: '장착할 수 없는 아이템입니다.' };
+      const def = item && game.items.get(item.code);
+      if (!def || def.kind !== 'equipment') return { error: '장착할 수 없는 아이템입니다.' };
       if (item.equipped) return { error: '이미 장착 중입니다.' };
+      // 칸을 안 고르면: 기본 칸, 기본 칸이 차 있고 같은 종류 칸(장신구 2)이 비어 있으면 그쪽.
+      let target = slot || def.slot;
+      if (!slot) {
+        const worn = new Set((await store.listItemRows(entry.row.id)).filter((it) => it.equipped).map((it) => it.slot));
+        const alt = [...game.slots.values()].find((s) => s.same === def.slot);
+        if (worn.has(def.slot) && alt && !worn.has(alt.id)) target = alt.id;
+      }
+      if (!game.slotFits(def, target)) return { error: '그 칸에는 낄 수 없는 장비입니다.' };
+      if (target !== item.slot) await store.setItemSlot(entry.row.id, item.id, target);
       if (!(await store.setEquipped(entry.row.id, item.id, true))) return { error: '장착하지 못했습니다.' };
       await loadEquipment(entry.row);
       clampVitals(entry.row);
@@ -643,9 +662,10 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
       const n = Number(count);
       if (!Number.isInteger(n) || n < 1 || n > 20) return { error: '한 번에 1~20개까지 살 수 있습니다.' };
       const cost = game.buyPrice(shop, code) * n;
-      if (entry.row.gold < cost) return { error: `골드가 부족합니다. (${cost} G 필요)` };
       const def = game.items.get(code);
       const add = Array.from({ length: n }, () => (def.kind === 'equipment' ? { code, grade: 'common', options: {}, slot: def.slot } : code));
+      if (game.bagCellsAfter(await store.listItemRows(entry.row.id), add) > BAG_SIZE) return { error: `가방이 가득 찼습니다. (최대 ${BAG_SIZE}칸)` };
+      if (entry.row.gold < cost) return { error: `골드가 부족합니다. (${cost} G 필요)` };
       // 메모리의 골드를 먼저 바꿔 두고, 저장에 실패하면 되돌린다.
       entry.row.gold -= cost;
       if (!(await store.applyChange(entry.row.id, { gold: entry.row.gold, add }))) {

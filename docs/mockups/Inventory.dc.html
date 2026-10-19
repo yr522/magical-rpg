@@ -124,7 +124,7 @@ class Component extends DCLogic {
       gradeColor: it.grade ? GRADE[it.grade] : t.muted,
       sell: `${Math.floor(it.price * SELL_RATE)} G (본부 상점)`,
       bigStyle: `width: 104px; height: 104px; display: grid; place-items: center; font-size: 56px; border-radius: 12px; background: ${t.panel2}; border: 3px solid ${it.grade ? GRADE[it.grade] : t.line}`,
-      actions: (it.kind === '소모품' ? [['사용', main], ['버리기', btn]] : it.kind === '재료' ? [['버리기', btn]] : [['장착', main], ['분해', btn], ['버리기', btn]])
+      actions: (it.kind === '소모품' ? [['사용', main], ['버리기', btn]] : it.kind === '재료' ? [['버리기', btn]] : [['분해', btn], ['버리기', btn]])
         .map(([label, style]) => ({ label, style, act: () => {} })),
     };
 

@@ -157,6 +157,10 @@ function createPostgresStore(connectionString) {
       }
     },
     // 장착: 같은 칸의 다른 장비를 빼고 이 장비를 낀다. 해제: equip=false.
+    // 장비를 다른 칸(예: 장신구 → 장신구 2)에 끼울 때 그 장비가 들어갈 칸을 바꾼다.
+    async setItemSlot(ownerId, itemId, slot) {
+      await pool.query('UPDATE items SET slot = $3 WHERE id = $1 AND owner_id = $2 AND NOT is_equipped', [itemId, ownerId, slot]);
+    },
     async setEquipped(ownerId, itemId, equip) {
       const client = await pool.connect();
       try {
@@ -299,6 +303,11 @@ function createFileStore(filePath) {
       }
       save();
       return true;
+    },
+    async setItemSlot(ownerId, itemId, slot) {
+      const item = data.items.find((i) => i.id === itemId && i.owner_id === ownerId && !i.is_equipped);
+      if (item) item.slot = slot;
+      save();
     },
     async setEquipped(ownerId, itemId, equip) {
       const item = data.items.find((i) => i.id === itemId && i.owner_id === ownerId);

@@ -12,6 +12,7 @@
 | BattleSizes.dc.html | 전투 전경 인원별 비교 (1~4명) |
 | Profile.dc.html | OC 프로필 창 (보기 · 편집) |
 | Inventory.dc.html | 인벤토리 창 |
+| Equip.dc.html | 장비 창 |
 | Status.dc.html | 스테이터스 창 |
 | Party.dc.html | 파티 창 |
 | Friends.dc.html | 친구 창 |

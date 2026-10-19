@@ -20,6 +20,42 @@ const slots = new Map(slotList.map((s) => [s.id, s]));
 const shops = new Map(shopList.map((s) => [s.id, s]));
 const { growth } = characterData;
 
+// 아이템을 어디서 얻는지 (상점 · 몬스터 드롭 · 분해 · 처음 시작) — 데이터에서 자동으로 모은다.
+const sources = new Map();
+const addSource = (code, text) => {
+  if (!sources.has(code)) sources.set(code, []);
+  if (!sources.get(code).includes(text)) sources.get(code).push(text);
+};
+for (const shop of shopList) for (const code of shop.sells) addSource(code, shop.name);
+for (const m of monsterList) for (const drop of m.drops || []) addSource(drop.item, m.name);
+for (const code of characterData.startEquipment) addSource(code, '처음 시작할 때');
+addSource('rift_shard', '장비 분해');
+
+// 이 장비를 그 칸에 낄 수 있는지 (장신구는 장신구 2 칸에도).
+const slotFits = (def, slotId) => {
+  const slot = slots.get(slotId);
+  return Boolean(slot && def.kind === 'equipment' && (slotId === def.slot || slot.same === def.slot));
+};
+
+// 가방 칸 수: 장비는 한 개당 한 칸(겹치지 않음), 나머지는 같은 종류끼리 한 칸.
+function bagCells(rows) {
+  const stackCodes = new Set();
+  let cells = 0;
+  for (const it of rows) {
+    const def = items.get(it.code);
+    if (!def || it.equipped) continue;
+    if (def.kind === 'equipment') cells += 1;
+    else stackCodes.add(it.code);
+  }
+  return cells + stackCodes.size;
+}
+
+// 지금 가방에 새 아이템들을 넣으면 몇 칸이 되는지.
+function bagCellsAfter(rows, adding) {
+  const list = [...rows, ...adding.map((x) => (typeof x === 'string' ? { code: x } : x))];
+  return bagCells(list);
+}
+
 // 서버 시작 시 맵이 잘못 적혀 있으면 바로 알려 준다 (없는 구역으로 가는 출구 등).
 function validateMap() {
   for (const zone of mapData.zones) {
@@ -186,11 +222,12 @@ const disassembleShards = (inst) => (grades.get(inst.grade) || grades.get('commo
 
 function itemView(inst, shop) {
   const def = items.get(inst.code);
-  const view = { id: inst.id, code: def.id, name: def.name, kind: def.kind, desc: def.desc };
+  const view = { id: inst.id, code: def.id, name: def.name, kind: def.kind, desc: def.desc, icon: def.icon || '📦', from: sources.get(def.id) || [] };
   if (def.kind === 'equipment') {
     const grade = grades.get(inst.grade) || grades.get('common');
     Object.assign(view, {
-      slot: def.slot,
+      slot: inst.slot || def.slot,
+      kindSlot: def.slot,
       slotName: slots.get(def.slot).name,
       grade: grade.id,
       gradeName: grade.name,
@@ -279,7 +316,8 @@ function characterView(row) {
       const inst = (row.equipment || []).find((e) => e.slot === sl.id);
       return [sl.id, inst ? itemView(inst) : null];
     })),
-    derived: derivedStats(stats, row.level),
+    derived: { ...derivedStats(stats, row.level), physAtk: stats.str * 2 + row.level, magAtk: stats.mag * 2 + row.level, def: Math.round(stats.vit * 1.5 + row.level) },
+    slots: slotList.map((sl) => ({ id: sl.id, name: sl.name })),
     skills: skillsFor(row.class, row.level).map((sk) => ({ id: sk.id, name: sk.name, mp: sk.mp, desc: sk.desc })),
     nextSkill: (skillList.find((sk) => sk.class === row.class && sk.level > row.level) || {}).level || null,
     locationId: row.location_id,
@@ -316,6 +354,9 @@ module.exports = {
   equipmentStats,
   rollEquipment,
   rollDrops,
+  slotFits,
+  bagCells,
+  bagCellsAfter,
   buyPrice,
   sellPrice,
   disassembleShards,

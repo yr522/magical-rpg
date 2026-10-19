@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>장비 창 시안</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&amp;family=Noto+Sans+KR:wght@300;400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font-family:inherit}
+button:focus-visible{outline:2px solid #b48cff;outline-offset:2px}
+</style>
+</helmet>
+<!-- 필드 화면 위에 뜨는 팝업 (뒤는 어둡게) — 인벤토리 창과 같은 크기 -->
+<div style="width: 1440px; height: 890px; box-sizing: border-box; position: relative; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans KR', system-ui, sans-serif; font-size: 14px; line-height: 1.5; background: radial-gradient(ellipse at 50% 30%, #2a3b33 0%, #12161a 70%); color: {{t.text}}">
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(5,4,10,0.6)"></div>
+
+  <div style="position: relative; z-index: 1; filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5))">
+    <button type="button" aria-label="장비 창 닫기" style="position: absolute; right: 12px; top: 10px; z-index: 2; width: 18px; height: 18px; padding: 0; border: none; background: transparent; color: #ffffff; font-size: 13px; line-height: 1; cursor: pointer">×</button>
+    <section role="dialog" aria-label="장비" style="width: 728px; height: 448px; box-sizing: border-box; display: flex; gap: 32px; padding: 22px 26px 20px 30px; background: linear-gradient(135deg, {{t.panel}} 0%, {{t.bg}} 100%)">
+
+      <!-- 왼쪽: 지금 낀 장비 6칸 + 고른 장비 설명 -->
+      <div style="flex: 1; min-width: 0; display: flex; gap: 22px">
+        <div style="flex: none; display: flex; flex-direction: column; gap: 8px">
+          <h2 style="margin: 0; font-size: 15px; font-weight: 700; color: {{t.muted}}">장비</h2>
+          <div style="display: grid; grid-template-columns: repeat(2, 64px); grid-auto-rows: 64px; gap: 10px">
+            <sc-for list="{{slots}}" as="sl" hint-placeholder-count="6">
+              <button type="button" onClick="{{sl.pick}}" aria-label="{{sl.label}}" title="{{sl.label}}" style="{{sl.style}}">{{sl.icon}}</button>
+            </sc-for>
+          </div>
+        </div>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 8px">
+          <sc-if value="{{hasSel}}" hint-placeholder-val="{{true}}">
+            <div>
+              <p style="margin: 0; font-family: 'Gowun Batang', serif; font-size: 18px; font-weight: 700; line-height: 1.3">{{sel.name}}</p>
+              <p style="margin: 2px 0 0; font-size: 12px; color: {{sel.gradeColor}}">{{sel.grade}} · {{sel.slot}}</p>
+            </div>
+            <p style="margin: 0; white-space: pre-line; font-size: 13px; line-height: 1.6">{{sel.desc}}</p>
+            <p style="margin: 0; white-space: pre-line; font-size: 13px; color: {{t.title}}">{{sel.stats}}</p>
+            <div style="display: flex; gap: 6px; margin-top: 4px">
+              <button type="button" onClick="{{act}}" style="{{actStyle}}">{{actLabel}}</button>
+            </div>
+          </sc-if>
+          <sc-if value="{{noSel}}" hint-placeholder-val="{{false}}">
+            <p style="margin: 0; color: {{t.muted}}">장비를 누르면 여기에 설명이 나와요.</p>
+          </sc-if>
+        </div>
+      </div>
+
+      <!-- 오른쪽: 가방 속 장비만 (인벤토리와 같은 칸, 장비는 겹치지 않고 한 칸씩) -->
+      <div style="flex: 0 0 304px; display: flex; flex-direction: column; gap: 12px">
+        <div aria-hidden="true" style="display: flex; align-items: center; gap: 14px; margin-right: 32px; color: {{t.accent}}">
+          <span style="flex: 1; height: 2px; background: {{t.accent}}"></span>
+          <span style="font-size: 16px; line-height: 1">✦</span>
+          <span style="flex: 1; height: 2px; background: {{t.accent}}"></span>
+        </div>
+        <div role="listbox" aria-label="가방 속 장비" style="flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px 2px 2px">
+          <div style="display: grid; grid-template-columns: repeat(5, 52px); grid-auto-rows: 52px; gap: 6px">
+            <sc-for list="{{bagCells}}" as="c" hint-placeholder-count="20">
+              <button type="button" role="option" aria-selected="{{c.on}}" aria-label="{{c.label}}" disabled="{{c.empty}}" onClick="{{c.pick}}" style="{{c.style}}">
+                <span aria-hidden="true" style="font-size: 24px; line-height: 1">{{c.icon}}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+        <p style="margin: 0; font-size: 12px; color: {{t.muted}}">가방 속 장비 {{bagCount}}개 · 같은 장비도 한 칸씩</p>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":890}}'>
+// 희귀도 색 (items.json의 grades.color와 같음)
+const GRADE = { 일반: '#c9c5d6', 고급: '#6fd39b', 희귀: '#6fa8ff', 영웅: '#c08bff', 전설: '#ffaa55', 신화: '#ff6b7a' };
+const SLOTS = ['무기', '의상', '장신구', '머리장식', '신발', '장신구 2'];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    let n = 0;
+    const item = (name, icon, slot, grade, desc, stats) => ({ id: ++n, name, icon, slot, grade, desc, stats });
+    this.state = {
+      dark: true,
+      worn: {
+        무기: item('별가루 지팡이', '🪄', '무기', '고급', '끝에서 별가루가 떨어진다.', '마력 +3 · 행운 +1'),
+        의상: item('프릴 계약복', '👗', '의상', '일반', '보기보다 질기다.', '체력 +2 · 민첩 +1'),
+        장신구: item('초록 핵 브로치', '💠', '장신구', '희귀', '몬스터 핵을 깎아 만든 브로치. 아직 따뜻하다.', '마력 +1 · 행운 +4'),
+        머리장식: item('별꽃 머리핀', '🎀', '머리장식', '영웅', '별꽃 모양 머리핀.', '마력 +4 · 행운 +2'),
+      },
+      bag: [
+        item('덩굴 낫', '🪓', '무기', '고급', '덩굴 포식자의 팔이 굳어 만들어진 낫.', '힘 +4 · 민첩 +1\n추가 옵션: 행운 +1'),
+        item('덩굴 낫', '🪓', '무기', '일반', '덩굴 포식자의 팔이 굳어 만들어진 낫.', '힘 +3 · 민첩 +1'),
+        item('잎사귀 망토', '🧥', '의상', '일반', '마른 잎이 겹겹이 엮인 망토. 바스락거린다.', '체력 +3'),
+        item('가시덩굴 마법봉', '🪄', '무기', '희귀', '쥐면 손바닥이 조금 따끔하다.', '마력 +6\n추가 옵션: 마력 +1'),
+        item('견습 리본', '🎀', '머리장식', '일반', '변신하면 저절로 묶이는 리본.', '체력 +1'),
+      ],
+      sel: { where: 'worn', key: '무기' },
+    };
+  }
+
+  theme() {
+    return this.state.dark
+      ? { bg: '#0f0e15', panel: '#1a1823', panel2: '#23202f', line: '#34304a', text: '#e7e3f2', muted: '#a49eba', accent: '#b48cff', accentText: '#160f24', title: '#f2c97a' }
+      : { bg: '#f3f0f8', panel: '#ffffff', panel2: '#ece8f4', line: '#d4cde4', text: '#1d1a28', muted: '#5c5570', accent: '#6b3fd1', accentText: '#ffffff', title: '#9a5b00' };
+  }
+
+  renderVals() {
+    const t = this.theme();
+    const s = this.state;
+    const cell = (it, on, size) => `position: relative; display: grid; place-items: center; padding: 0; border-radius: ${size > 56 ? 12 : 8}px; cursor: pointer; color: ${t.text}; font-size: ${size > 56 ? 30 : 24}px; background: ${t.panel2}; border: 2px solid ${GRADE[it.grade]}; box-shadow: ${on ? `0 0 0 2px ${t.accent}` : `0 0 8px ${GRADE[it.grade]}55`}`;
+
+    const slots = SLOTS.map((slot) => {
+      const it = s.worn[slot];
+      const on = s.sel.where === 'worn' && s.sel.key === slot;
+      if (!it) return { label: `${slot} (빈 칸)`, icon: '', pick: () => {}, style: `border-radius: 12px; border: 1px dashed ${t.line}; background: transparent; cursor: default` };
+      return { label: `${slot}: ${it.name} (${it.grade})`, icon: it.icon, pick: () => this.setState({ sel: { where: 'worn', key: slot } }), style: cell(it, on, 64) };
+    });
+    const bagCells = Array.from({ length: Math.max(20, Math.ceil(s.bag.length / 5) * 5) }, (_, i) => s.bag[i] || null).map((it) => {
+      if (!it) return { empty: true, on: 'false', label: '빈 칸', icon: '', pick: () => {}, style: `position: relative; border-radius: 8px; border: 1px dashed ${t.line}; background: transparent; cursor: default` };
+      const on = s.sel.where === 'bag' && s.sel.key === it.id;
+      return { empty: false, on: String(on), icon: it.icon, label: `${it.name} (${it.grade} ${it.slot})`, pick: () => this.setState({ sel: { where: 'bag', key: it.id } }), style: cell(it, on, 52) };
+    });
+
+    const sel = s.sel.where === 'worn' ? s.worn[s.sel.key] : s.bag.find((it) => it.id === s.sel.key);
+    const btn = 'height: 30px; padding: 0 16px; border-radius: 8px; font-size: 13px; cursor: pointer';
+    const wearing = s.sel.where === 'worn';
+
+    return {
+      t, slots, bagCells,
+      bagCount: s.bag.length,
+      hasSel: Boolean(sel), noSel: !sel,
+      sel: sel ? { ...sel, gradeColor: GRADE[sel.grade] } : {},
+      // 낀 장비는 [벗기], 가방 장비는 [장착] (같은 칸에 낀 게 있으면 서로 바꿔 낀다)
+      actLabel: wearing ? '벗기' : (sel && s.worn[sel.slot] ? '바꿔 끼기' : '장착'),
+      actStyle: wearing ? `${btn}; border: 1px solid ${t.line}; background: ${t.panel2}; color: ${t.text}` : `${btn}; border: none; background: ${t.accent}; color: ${t.accentText}; font-weight: 700`,
+      act: () => {
+        if (!sel) return;
+        if (wearing) {
+          const worn = { ...s.worn };
+          delete worn[sel.slot];
+          return this.setState({ worn, bag: [...s.bag, sel], sel: { where: 'bag', key: sel.id } });
+        }
+        const old = s.worn[sel.slot];
+        const bag = s.bag.filter((it) => it.id !== sel.id);
+        if (old) bag.push(old);
+        this.setState({ worn: { ...s.worn, [sel.slot]: sel }, bag, sel: { where: 'worn', key: sel.slot } });
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>
