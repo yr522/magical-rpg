@@ -66,16 +66,27 @@
 
   const optionName = (list, id) => (state.options?.[list].find((o) => o.id === id) || {}).name || id;
 
-  function openModal(content, cls = 'pop-small') {
+  // onDismiss: 대답이 필요한 팝업(파티 초대, 같이 토벌 입장)에서 ×나 Esc로 닫으면 '거절/취소'로 친다.
+  // 대답이 필요한 팝업이 떠 있는 동안에는 다른 팝업이 그 위를 덮어 버리지 않는다.
+  let modalDismiss = null;
+  let pendingModal = null;
+  function openModal(content, cls = 'pop-small', onDismiss = null) {
+    if (modalDismiss && !onDismiss && !$('modal').classList.contains('hidden')) return toast('먼저 떠 있는 창에 대답해 주세요.');
+    modalDismiss = onDismiss;
     $('modal-panel').className = `popup ${cls}`;
     $('modal-content').replaceChildren(content);
     $('modal').classList.remove('hidden');
   }
-  const closeModal = () => $('modal').classList.add('hidden');
-  $('modal-close').addEventListener('click', closeModal);
-  // 창 바깥(어두운 곳)을 누르거나 Esc를 누르면 닫힌다.
-  $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('modal').classList.contains('hidden')) closeModal(); });
+  const closeModal = () => {
+    const wasAsking = Boolean(modalDismiss);
+    modalDismiss = null;
+    $('modal').classList.add('hidden');
+    if (wasAsking && pendingModal) { const next = pendingModal; pendingModal = null; openModal(next); }
+  };
+  const dismissModal = () => { const dismiss = modalDismiss; closeModal(); if (dismiss) dismiss(); };
+  // 팝업은 ×나 Esc로만 닫힌다 (바깥을 눌러도 닫히지 않는다).
+  $('modal-close').addEventListener('click', dismissModal);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('modal').classList.contains('hidden')) dismissModal(); });
 
   // ---------- 접속 / 로그인 ----------
   // 처음 접속했을 때의 서버 버전을 기억해 두고, 다시 연결됐을 때 버전이 바뀌었으면
@@ -697,11 +708,14 @@
       cls = '';
       lines.push('무사히 전투에서 벗어났다. 토벌 이벤트는 그대로 남아 있다.');
     }
-    openModal(el('div', { class: 'result' }, [
+    const box = el('div', { class: 'result' }, [
       el('div', { class: `big ${cls}`, text: title }),
       ...lines.map((t) => el('p', { text: t })),
       ...(data.items || []).map((it) => el('p', {}, ['획득: ', itemName(it), it.stats ? el('span', { class: 'muted', text: ` (${statText(it.stats)})` }) : null])),
-    ]));
+    ]);
+    // 대답을 기다리는 창(파티 초대 등)이 떠 있으면, 그 창을 닫은 뒤에 결과를 보여 준다.
+    if (modalDismiss && !$('modal').classList.contains('hidden')) pendingModal = box;
+    else openModal(box);
   }
 
   // ---------- 채팅 ----------
@@ -1603,7 +1617,7 @@
       el('p', {}, [el('b', { text: from }), `이(가) `, el('b', { text: `[${name}]` }), '에 초대했어요.']),
       el('p', { class: 'muted', text: '파티에 들어갈까요?' }),
       el('div', { class: 'dactions' }, [actBtn('수락', answer(true), true), actBtn('거절', answer(false))]),
-    ]), 'pop-small');
+    ]), 'pop-small', answer(false));
   });
 
   // 파티 같이 토벌 입장: 모두 수락하면 들어간다. 누가 수락했는지 보여 주는 팝업.
@@ -1619,7 +1633,7 @@
       el('ul', { class: 'vote-list' }, members.map((m) => el('li', { class: m.accepted ? 'ok' : '' }, [el('span', { text: m.accepted ? '✔' : '…' }), ` ${m.name}`, el('small', { text: m.accepted ? ' 수락' : ' 기다리는 중' })]))),
       el('p', { class: 'muted', text: `모두 수락하는 순간 같이 들어가요. (${seconds}초 안에)` }),
       el('div', { class: 'dactions' }, mine ? [actBtn('취소', answer(false))] : [actBtn('수락', answer(true), true), actBtn('거절', answer(false))]),
-    ]), 'pop-small');
+    ]), 'pop-small', answer(false));
   });
   socket.on('raid:voteEnd', ({ message }) => {
     if ($('modal-content').querySelector('.vote-list')) closeModal();
