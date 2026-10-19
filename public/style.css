@@ -574,3 +574,22 @@ body.light .popup-close { color: var(--text); }
 .rel-badge.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .rel-form { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 12px; border: 1px dashed var(--line); }
 .rel-form select { flex: 0 0 160px; width: auto; }
+
+/* 친구 · 파티 창 위 탭 */
+.list-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.list-tabs button { height: 26px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 12px; }
+.list-tabs button.on { border-color: var(--accent); color: var(--accent); background: var(--panel-2); font-weight: 700 !important; }
+.pname-view { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pname-view .gear { width: 22px; height: 22px; padding: 0; display: grid; place-items: center; border: none; background: transparent; color: var(--muted); }
+.pname-edit { display: flex; align-items: center; gap: 6px; }
+.pname-edit input { width: 200px; height: 32px; margin: 0; border-color: var(--accent); }
+
+/* 필드 파티 정보 */
+.party-panel { position: absolute; left: 28px; top: 142px; z-index: 2; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; width: 230px; }
+.party-panel li { display: flex; align-items: center; gap: 10px; padding: 6px 10px 6px 6px; border-radius: 8px; background: rgba(0,0,0,.5); color: #fff; }
+.party-panel .pp-ava { width: 36px; height: 36px; }
+.pp-info { min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
+.pp-top { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-top small { font-size: 12px; opacity: .75; }
+.pp-top b.me { color: #cdb3ff; }
+.pp-where { font-size: 10px; opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -260,3 +260,39 @@ test('친구: 신청 → 수락, 관계: 친구에게만 신청 → 수락하면
   await a.call('links:remove', { linkId: fa.friends[0].linkId });
   assert.deepStrictEqual((await a.call('profile:view', { id: a.id })).profile.relations, []);
 });
+
+test('파티: 접속 중인 사람만 초대 → 수락, 파티장 위임 · 이름 바꾸기 · 추방 · 나가기', async () => {
+  const mk = async (nick, name) => {
+    const s = await client();
+    await s.call('auth:register', { nickname: nick, password: 'pass1234' });
+    const c = await s.call('char:create', { name, gender: 'girl', element: 'water', classId: 'supporter', godId: 'god_mag' });
+    await s.call('char:select', { id: c.character.id });
+    s.id = c.character.id;
+    return s;
+  };
+  const a = await mk('파티가', '파티장님');
+  const b = await mk('파티비', '파티원님');
+  const c = await mk('파티씨', '셋째님');
+  await c.call('char:leave');
+  assert.match((await a.call('party:invite', { name: '셋째님' })).error, /오프라인/);
+  assert.match((await a.call('party:invite', { name: '아무도아님' })).error, /없어요/);
+
+  const invited = new Promise((r) => b.once('party:invited', r));
+  let r = await a.call('party:invite', { name: '파티원님' });
+  assert.ok(r.ok, r.error);
+  assert.strictEqual(r.party.name, '파티장님의 파티');
+  const inv = await invited;
+  r = await b.call('party:respond', { partyId: inv.partyId, accept: true });
+  assert.deepStrictEqual(r.party.members.map((m) => [m.name, m.leader]), [['파티장님', true], ['파티원님', false]]);
+
+  assert.match((await b.call('party:rename', { name: '별빛단' })).error, /파티장만/);
+  assert.strictEqual((await a.call('party:rename', { name: '별빛단' })).party.name, '별빛단');
+  r = await a.call('party:delegate', { id: b.id });
+  assert.strictEqual(r.party.leaderId, b.id);
+  assert.strictEqual(r.party.members[0].name, '파티원님');
+  r = await b.call('party:kick', { id: a.id });
+  assert.strictEqual(r.party.members.length, 1);
+  assert.strictEqual((await a.call('party:view')).party, null);
+  await b.call('party:leave');
+  assert.strictEqual((await b.call('party:view')).party, null);
+});

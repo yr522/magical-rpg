@@ -67,7 +67,11 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
   const playersInZone = (zoneId) =>
     [...online.values()].filter((e) => e.row.location_id === zoneId).map(playerSummary);
 
-  const sendPlayers = (zoneId) => io.to(zoneRoom(zoneId)).emit('zone:players', playersInZone(zoneId));
+  const sendPlayers = (zoneId) => {
+    io.to(zoneRoom(zoneId)).emit('zone:players', playersInZone(zoneId));
+    // 위치 · 접속 · 전투 상태가 바뀌는 곳마다 불리므로, 파티 정보도 같이 새로 보낸다.
+    for (const party of parties.values()) sendParty(party);
+  };
 
   // 지금 게임 안에 있는 캐릭터 수 (화면 맨 아래 상태 줄)
   const sendOnlineCount = () => io.to(WORLD_ROOM).emit('online:count', { count: online.size });
@@ -272,6 +276,37 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
   }
 
   const rowOf = async (id) => online.get(id)?.row || (await store.getCharacter(id));
+
+  // ---------- 파티 (서버 메모리에만, 최대 MAX_PARTY명) ----------
+  // party: { id, name, customName, leaderId, members: [캐릭터 id], invites: Set<캐릭터 id> }
+  const parties = new Map();
+  const partyOf = new Map(); // 캐릭터 id → 파티 id
+  let nextPartyId = 1;
+  const PARTY_NAME_MAX = 16;
+
+  const partyName = async (party) => party.customName || `${(await rowOf(party.leaderId))?.name || '?'}의 파티`;
+  async function partyView(party) {
+    const members = (await Promise.all(party.members.map(rowOf))).filter(Boolean).map((row) => ({ ...presenceView(row), leader: row.id === party.leaderId }));
+    // 파티장이 맨 위
+    members.sort((a, b) => b.leader - a.leader);
+    return { id: party.id, name: await partyName(party), leaderId: party.leaderId, max: MAX_PARTY, members };
+  }
+  function sendParty(party) {
+    partyView(party).then((view) => {
+      for (const id of party.members) online.get(id)?.socket?.emit('party:update', { party: view });
+    }).catch((err) => console.error('[party]', err));
+  }
+  function leaveParty(charId) {
+    const party = parties.get(partyOf.get(charId));
+    if (!party) return;
+    party.members = party.members.filter((id) => id !== charId);
+    partyOf.delete(charId);
+    online.get(charId)?.socket?.emit('party:update', { party: null });
+    if (!party.members.length) return parties.delete(party.id);
+    // 파티장이 나가면 남은 사람 중 다음 사람이 파티장
+    if (party.leaderId === charId) party.leaderId = party.members[0];
+    sendParty(party);
+  }
 
   // 친구 · 관계가 바뀌면 상대 화면도 다시 그리게 알린다.
   const notifyLinks = (charId) => online.get(charId)?.socket?.emit('links:changed');
@@ -515,6 +550,7 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
         online.get(row.id).socket?.emit('kicked', { reason: '캐릭터가 삭제되었습니다.' });
         removeFromWorld(row.id);
       }
+      leaveParty(row.id);
       await store.deleteCharacter(socket.data.userId, row.id);
       reply({ ok: true });
     });
@@ -645,6 +681,100 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
       await store.addLink({ kind: 'relation', fromId: entry.row.id, toId: other, name: relName });
       notifyLinks(other);
       reply({ ok: true, ...(await friendsView(entry.row.id)) });
+    });
+
+    // ---------- 파티 ----------
+    const myParty = (entry) => parties.get(partyOf.get(entry.row.id)) || null;
+    const replyParty = async (reply, entry) => {
+      const party = myParty(entry);
+      reply({ ok: true, party: party ? await partyView(party) : null });
+    };
+
+    on('party:view', async (_payload, reply) => {
+      const entry = needEntry(reply);
+      if (entry) await replyParty(reply, entry);
+    });
+
+    // 초대: 접속 중인 캐릭터에게만. 파티가 없으면 내가 파티장인 파티를 만든다.
+    on('party:invite', async ({ name }, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      const wanted = String(name || '').trim().toLowerCase();
+      if (!wanted) return reply({ error: '이름을 적어 주세요.' });
+      const target = [...online.values()].find((e) => e.row.name.toLowerCase() === wanted);
+      if (!target) return reply({ error: (await store.getCharacterByName(wanted)) ? '캐릭터가 오프라인입니다.' : '그런 이름의 캐릭터가 없어요.' });
+      if (!target.socket) return reply({ error: '캐릭터가 오프라인입니다.' });
+      if (target.row.id === entry.row.id) return reply({ error: '나 자신은 초대할 수 없어요.' });
+      let party = myParty(entry);
+      if (party && party.leaderId !== entry.row.id) return reply({ error: '파티장만 초대할 수 있어요.' });
+      if (party && party.members.includes(target.row.id)) return reply({ error: '이미 파티에 있는 캐릭터예요.' });
+      if (partyOf.has(target.row.id)) return reply({ error: '이미 다른 파티에 있는 캐릭터예요.' });
+      if (party && party.members.length >= MAX_PARTY) return reply({ error: `파티가 가득 찼어요. (최대 ${MAX_PARTY}명)` });
+      if (!party) {
+        party = { id: nextPartyId++, customName: null, leaderId: entry.row.id, members: [entry.row.id], invites: new Set() };
+        parties.set(party.id, party);
+        partyOf.set(entry.row.id, party.id);
+      }
+      party.invites.add(target.row.id);
+      target.socket.emit('party:invited', { partyId: party.id, from: entry.row.name, name: await partyName(party) });
+      sendParty(party);
+      await replyParty(reply, entry);
+    });
+
+    on('party:respond', async ({ partyId, accept }, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      const party = parties.get(Number(partyId));
+      if (!party || !party.invites.has(entry.row.id)) return reply({ error: '초대가 없거나 끝났어요.' });
+      party.invites.delete(entry.row.id);
+      if (!accept) {
+        online.get(party.leaderId)?.socket?.emit('log', { text: `${entry.row.name}이(가) 파티 초대를 거절했다.` });
+        return reply({ ok: true, party: null });
+      }
+      if (partyOf.has(entry.row.id)) return reply({ error: '이미 다른 파티에 있어요. 먼저 나가 주세요.' });
+      if (party.members.length >= MAX_PARTY) return reply({ error: '파티가 가득 찼어요.' });
+      party.members.push(entry.row.id);
+      partyOf.set(entry.row.id, party.id);
+      sendParty(party);
+      await replyParty(reply, entry);
+    });
+
+    on('party:leave', async (_payload, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      leaveParty(entry.row.id);
+      reply({ ok: true, party: null });
+    });
+
+    // 파티장만: 추방 · 파티장 위임 · 이름 바꾸기
+    const leaderCommand = (event, handler) => on(event, async (payload, reply) => {
+      const entry = needEntry(reply);
+      if (!entry) return;
+      const party = myParty(entry);
+      if (!party || party.leaderId !== entry.row.id) return reply({ error: '파티장만 할 수 있어요.' });
+      const error = await handler(party, payload, entry);
+      if (error) return reply({ error });
+      sendParty(party);
+      await replyParty(reply, entry);
+    });
+    leaderCommand('party:kick', async (party, { id }) => {
+      const target = Number(id);
+      if (!party.members.includes(target) || target === party.leaderId) return '추방할 수 없는 멤버예요.';
+      leaveParty(target);
+      online.get(target)?.socket?.emit('log', { text: '파티에서 추방되었다.' });
+      return null;
+    });
+    leaderCommand('party:delegate', async (party, { id }) => {
+      const target = Number(id);
+      if (!party.members.includes(target) || target === party.leaderId) return '위임할 수 없는 멤버예요.';
+      party.leaderId = target;
+      return null;
+    });
+    leaderCommand('party:rename', async (party, { name }) => {
+      const clean = String(name || '').trim();
+      if (clean.length > PARTY_NAME_MAX) return `파티 이름은 ${PARTY_NAME_MAX}자까지예요.`;
+      party.customName = clean || null; // 비우면 기본 이름(파티장 이름의 파티)
+      return null;
     });
 
     // ---------- OC 프로필 ----------

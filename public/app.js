@@ -21,6 +21,7 @@
     draft: {},
     battle: null, // 전투 중이면 서버가 보낸 전투 화면 데이터
     battleMenu: 'main', // main / skill / item
+    party: null, // 들어가 있는 파티
     fieldMenu: 'main', // main / move
     bubbles: new Map(), // 캐릭터 id → { text, until } 말풍선
   };
@@ -249,6 +250,7 @@
     shop: 'M4 7h16l-1 4H5zM5 11v8h14v-8M9 19v-5h6v5',
     back: 'M19 12H5M11 6l-6 6 6 6',
   };
+  const GEAR_PATH = 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z';
   const SVG_NS = 'http://www.w3.org/2000/svg';
   function icon(path, size = 22) {
     const svg = document.createElementNS(SVG_NS, 'svg');
@@ -302,6 +304,8 @@
     for (const msg of history) addChat(msg);
     if (data.resumed) addSystem('연결이 다시 이어졌다.');
     setOnline(data.onlineCount);
+    state.party = null;
+    renderPartyPanel();
     setBattleMode(false);
     enterZone(data.zone, data.players);
     show('game');
@@ -1375,7 +1379,7 @@
     for (const r of rows.slice(0, f.incoming.length)) r.querySelector('.msub').textContent = '친구 신청을 보냈어요';
     const online = friends.filter((p) => p.status !== 'offline').length;
     const win = el('div', { class: 'list-win' }, [
-      el('header', {}, [el('div', { class: 'phead' }, [el('h2', { class: 'ptitle', text: '친구' }), el('span', { class: 'who', text: `접속 중 ${online} / ${friends.length}명` })]), ornament()]),
+      el('header', {}, [listTabs('friends'), el('div', { class: 'phead' }, [el('h2', { class: 'ptitle', text: '친구' }), el('span', { class: 'who', text: `접속 중 ${online} / ${friends.length}명` })]), ornament()]),
       el('ul', { class: 'mlist', 'aria-label': '친구 목록' }, rows.length ? rows : [el('li', { class: 'muted empty-note', text: '아직 친구가 없어요. [+ 친구 추가]로 신청해 보세요.' })]),
       el('footer', { class: 'list-foot' }, [
         f.sent.length ? el('span', { class: 'muted', text: `보낸 신청: ${f.sent.map((s) => s.name).join(', ')}` }) : el('span'),
@@ -1466,6 +1470,109 @@
     request('friends:list').then((res) => (res.error ? toast(res.error) : draw(res)));
     return [box];
   };
+
+  // ---------- 파티 창 · 필드 파티 정보 ----------
+  // 친구 · 파티는 같은 아이콘이라 창 위쪽 제목을 눌러 오간다.
+  const listTabs = (active) => el('div', { class: 'list-tabs', role: 'tablist' }, [
+    el('button', { type: 'button', role: 'tab', 'aria-selected': String(active === 'friends'), class: active === 'friends' ? 'on' : '', text: '친구', onclick: () => active !== 'friends' && openFriends() }),
+    el('button', { type: 'button', role: 'tab', 'aria-selected': String(active === 'party'), class: active === 'party' ? 'on' : '', text: '파티', onclick: () => active !== 'party' && openParty() }),
+  ]);
+
+  async function openParty() {
+    const res = await request('party:view');
+    if (res.error) return toast(res.error);
+    state.party = res.party;
+    renderParty();
+  }
+  const partyOpen = () => !$('modal').classList.contains('hidden') && $('modal-content').querySelector('[aria-label="파티 멤버"]');
+
+  function renderParty(renaming = false, note = '') {
+    const party = state.party;
+    const meId = state.character.id;
+    const amLeader = !party || party.leaderId === meId;
+    const set = (res) => {
+      if (res.error) return toast(res.error);
+      state.party = res.party;
+      renderPartyPanel();
+      renderParty();
+    };
+    // 이름 + (파티장만) 작은 설정 아이콘 → 그 자리에서 고치고 엔터나 [저장]
+    let title;
+    if (party && renaming) {
+      const input = el('input', { value: party.name, maxlength: '16', autocomplete: 'off', 'aria-label': '파티 이름' });
+      title = el('form', { class: 'pname-edit' }, [input, el('button', { type: 'submit', class: 'pbtn main small', text: '저장' })]);
+      title.addEventListener('submit', async (e) => { e.preventDefault(); set(await request('party:rename', { name: input.value })); });
+      setTimeout(() => input.focus());
+    } else {
+      title = el('div', { class: 'pname-view' }, [
+        el('h2', { class: 'ptitle', text: party ? party.name : '파티' }),
+        party && amLeader ? el('button', { type: 'button', class: 'gear', 'aria-label': '파티 이름 바꾸기', title: '파티 이름 바꾸기', onclick: () => renderParty(true) }, [icon(GEAR_PATH, 14)]) : null,
+      ]);
+    }
+    const rows = (party ? party.members : []).map((m) => {
+      const me = m.id === meId;
+      const menu = me ? [['파티 나가기', async () => set(await request('party:leave')), true]]
+        : amLeader ? [['파티장 위임', async () => set(await request('party:delegate', { id: m.id }))], ['추방', async () => set(await request('party:kick', { id: m.id })), true]] : [];
+      const row = memberRow({ ...m, badge: m.leader ? el('span', { class: 'mbadge', text: '👑 파티장' }) : null }, { cls: m.leader ? 'leader' : '', menu });
+      if (me) row.querySelector('.mname').classList.add('me');
+      return row;
+    });
+    const win = el('div', { class: 'list-win' }, [
+      el('header', {}, [listTabs('party'), el('div', { class: 'phead' }, [title, el('span', { class: 'who', text: party ? `${party.members.length} / ${party.max}명` : '' })]), ornament()]),
+      el('ul', { class: 'mlist', 'aria-label': '파티 멤버' }, rows.length ? rows : [el('li', { class: 'muted empty-note', text: '파티에 들어가 있지 않아요. [+ 초대]로 친구를 부르면 파티가 만들어져요.' })]),
+      el('footer', { class: 'list-foot' }, [
+        el('span', { class: 'muted', text: note || (party ? '멤버를 우클릭하면 메뉴가 떠요.' : '') }),
+        amLeader ? el('button', { type: 'button', class: 'pbtn small', text: '+ 초대', onclick: () => nameAsk(win, {
+          label: '초대할 캐릭터 이름', placeholder: '예: 유키', button: '초대 보내기',
+          submit: async (name) => {
+            if (!name) return '이름을 적어 주세요.';
+            const res = await request('party:invite', { name });
+            if (res.error) return res.error;
+            state.party = res.party;
+            renderPartyPanel();
+            renderParty(false, `${name}에게 초대를 보냈어요. 수락하면 파티에 들어와요.`);
+            return null;
+          },
+        }) }) : null,
+      ]),
+    ]);
+    openModal(win, 'pop-list');
+  }
+
+  socket.on('party:update', ({ party }) => {
+    state.party = party;
+    renderPartyPanel();
+    if (partyOpen()) renderParty();
+  });
+  // 초대를 받으면 바닥 글 상자에 선택지가 뜬다.
+  socket.on('party:invited', ({ partyId, from, name }) => {
+    const answer = (accept) => async () => {
+      const res = await request('party:respond', { partyId, accept });
+      if (res.error) toast(res.error);
+      else if (accept) { state.party = res.party; renderPartyPanel(); }
+      showCaption(accept && !res.error ? `[${name}]에 들어갔다.` : '파티 초대를 거절했다.', null, false);
+    };
+    showCaption(`${from}이(가) [${name}]에 초대했다.`, [{ label: '1. 들어간다', pick: answer(true) }, { label: '2. 거절한다', pick: answer(false) }]);
+  });
+
+  // 필드 왼쪽 위 (맵 이름 아래): 나 포함 파티원. 반투명 검정, 외곽선 없음.
+  function renderPartyPanel() {
+    const box = $('party-panel');
+    const party = state.party;
+    if (!party) return box.classList.add('hidden');
+    box.classList.remove('hidden');
+    box.replaceChildren(...party.members.map((m) => {
+      const ava = memberAvatar(m);
+      ava.classList.add('pp-ava');
+      return el('li', {}, [
+        ava,
+        el('span', { class: 'pp-info' }, [
+          el('span', { class: 'pp-top' }, [el('small', { text: `Lv.${m.level} ` }), el('b', { class: m.id === state.character?.id ? 'me' : '', text: m.name }), m.leader ? el('span', { 'aria-label': '파티장', text: ' 👑' }) : null]),
+          el('span', { class: 'pp-where', text: m.where }),
+        ]),
+      ]);
+    }));
+  }
 
   for (const btn of document.querySelectorAll('[data-menu]')) {
     btn.addEventListener('click', () => {

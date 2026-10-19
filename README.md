@@ -63,6 +63,9 @@
 | 친구 신청 | 상대가 오프라인이어도 신청은 남고, 접속하면 받은 신청에 보인다. 서로 신청하면 바로 친구 | `server/index.js`의 `friends:request` |
 | 친구 삭제 | 그 사람과의 관계도 같이 없어진다 | `server/index.js`의 `links:remove` |
 | 관계 이름 | 12자까지, 한 사람과 관계 하나 | `character.json`의 `profile.relationMax` |
+| 파티 저장 | 서버 메모리에만 둔다. 서버가 다시 켜지면 파티는 사라진다 (접속을 끊었다 들어오는 건 괜찮다) | `server/index.js`의 `parties` |
+| 파티 초대 | 파티장만 초대할 수 있고, 받은 사람은 바닥 글 상자에서 [들어간다] / [거절한다]. 파티가 없을 때 초대하면 내가 파티장인 파티가 생긴다 | `server/index.js`의 `party:invite` |
+| 친구 · 파티 창 | 같은 아이콘이라 창 위쪽 [친구] [파티] 탭으로 오간다 | `public/app.js`의 `listTabs` |
 
 **덩굴 포식자 장비 드롭 확률 (한 번 잡을 때 각각 따로 굴림)**
 
