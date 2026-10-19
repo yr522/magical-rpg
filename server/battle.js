@@ -44,6 +44,7 @@ class Battle {
     this.busy = false;
     this.ended = false;
     this.lines = [];
+    this.monsterTie = Math.random(); // 민첩이 같을 때의 순서. 전투 내내 그대로 (라운드마다 바뀌지 않게)
   }
 
   get id() {
@@ -79,6 +80,7 @@ class Battle {
       defending: false,
       down: false,
       dealt: 0,
+      tie: Math.random(),
     };
     this.party.set(p.id, p);
     this.log(`${p.name}의 몸을 ${TRANSFORM_FLAVOR[p.element] || '빛이'} 감싼다. 계약의 문장이 새겨진다 — 변신!`);
@@ -118,10 +120,10 @@ class Battle {
       p.buffs = p.buffs.map((b) => ({ ...b, rounds: b.rounds - 1 })).filter((b) => b.rounds > 0);
       p.taunt = Math.max(0, p.taunt - 1);
     }
-    // 민첩 높은 순, 같으면 무작위.
-    const turns = [...this.party.values()].filter((p) => !p.down).map((p) => ({ kind: 'player', id: p.id, agi: p.agi }));
-    turns.push({ kind: 'monster', agi: this.def.agi });
-    this.order = turns.map((t) => ({ ...t, tie: this.rng() })).sort((a, b) => b.agi - a.agi || a.tie - b.tie);
+    // 민첩 높은 순, 같으면 무작위 — 그 무작위는 들어올 때 한 번만 정해서 라운드마다 순서가 뒤바뀌지 않는다.
+    const turns = [...this.party.values()].filter((p) => !p.down).map((p) => ({ kind: 'player', id: p.id, agi: p.agi, tie: p.tie }));
+    turns.push({ kind: 'monster', agi: this.def.agi, tie: this.monsterTie });
+    this.order = turns.sort((a, b) => b.agi - a.agi || a.tie - b.tie);
     this.turnIndex = -1;
     this.log(`— ${this.round}라운드 —`);
     this.nextTurn();
@@ -237,6 +239,7 @@ class Battle {
     for (let i = 0; i < hits && this.monster.hp > 0; i++) {
       if (this.rng() * 100 < evasion) {
         this.log(`${p.name}의 ${label}! 그러나 ${this.def.name}이(가) 피했다.`);
+        this.hooks.onHit?.(this, { miss: true });
         continue;
       }
       let dmg = calcDamage({ atk: atk * atkBoost, coef, def: this.def.def, mult: resist.mult, rng: this.rng });
@@ -244,6 +247,7 @@ class Battle {
       if (crit) dmg = Math.round(dmg * 1.5);
       this.monster.hp = Math.max(0, this.monster.hp - dmg);
       p.dealt += dmg;
+      this.hooks.onHit?.(this, { amount: dmg, element, crit, resist: this.def.resist[element] || 'normal' });
       this.log(`${p.name}의 ${label}!${crit ? ' 치명타!' : ''} ${this.def.name}에게 ${dmg} 데미지.${resist.note}`);
     }
   }

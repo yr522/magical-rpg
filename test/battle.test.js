@@ -315,3 +315,25 @@ test('파티 같이 입장: 같은 장소의 파티원이 모두 수락하면 �
   assert.strictEqual(a.latest.round, 1);
   for (const s of [a, b]) await s.call('char:leave');
 });
+
+test('민첩이 같아도 차례 순서는 라운드마다 바뀌지 않고, 몬스터가 맞으면 데미지 연출 신호가 간다', () => {
+  const { Battle } = require('../server/battle');
+  const hits = [];
+  const hooks = { onLog() {}, onUpdate() {}, onLeave() {}, onEnd() {}, onHit: (b, h) => hits.push(h), consumeItem: async () => true };
+  const battle = new Battle({ event: { id: 'order-test', monster: 'vine_devourer' }, hooks, rng: Math.random, turnMs: 60000, monsterDelayMs: 60000 });
+  const row = (id, name) => ({ id, name, element: 'fire', class: 'attacker', level: 1, str: 5, agi: 5, vit: 5, mag: 5, luk: 5, hp: 999, mp: 99, equipment: [] });
+  battle.join(row(1, '가'), [], true);
+  battle.join(row(2, '나'), [], false);
+  const players = () => battle.order.filter((t) => t.kind === 'player').map((t) => t.id).join(',');
+  const first = players();
+  for (let i = 0; i < 20; i++) {
+    clearTimeout(battle.timer);
+    battle.startRound();
+    assert.strictEqual(players(), first);
+  }
+  const p = battle.party.get(1);
+  battle.hitMonster(p, { atk: p.magAtk, coef: 1, element: 'fire', label: '공격' });
+  assert.ok(hits.length === 1 && (hits[0].miss || (hits[0].amount > 0 && hits[0].element === 'fire')));
+  clearTimeout(battle.timer);
+  battle.ended = true;
+});

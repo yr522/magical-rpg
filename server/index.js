@@ -120,6 +120,10 @@ function createGameServer({ store, graceMs = RECONNECT_GRACE_MS, battleOptions =
     onLine(battle, p, text) {
       io.to(battleRoom(battle.id)).emit('chat', { channel: 'battle', from: { id: p.id, name: p.name, avatarUrl: p.avatarUrl }, text, at: Date.now(), preset: true });
     },
+    // 몬스터가 맞은 데미지: 화면에서 숫자가 떠오르는 연출에 쓴다.
+    onHit(battle, hit) {
+      io.to(battleRoom(battle.id)).emit('battle:hit', hit);
+    },
     onUpdate(battle) {
       for (const p of battle.party.values()) online.get(p.id)?.socket?.emit('battle:state', battle.view(p.id));
     },
