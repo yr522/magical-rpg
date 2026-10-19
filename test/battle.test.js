@@ -284,7 +284,7 @@ test('대사 프리셋: 전투 시작 · 공격할 때 내 대사가 전투 채�
   await s.call('battle:action', { action: 'attack' });
   await until(s, () => said.length >= 2);
   assert.deepStrictEqual(said.slice(0, 2), ['계약의 이름으로!', '간다!']);
-  await s.call('battle:action', { action: 'flee' }).catch(() => {});
+  await s.call('char:leave'); // 다음 테스트가 빈 전투로 시작하게 나간다
 });
 
 test('파티 같이 입장: 같은 장소의 파티원이 모두 수락하면 다 같이 들어가고, 한 명이 거절하면 취소', async () => {
